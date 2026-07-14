@@ -1,0 +1,26 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Deny by default. Authenticated users may only access their own tree.
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /habits/{habitId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /habitCompletions/{completionId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /goals/{goalId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /goalCompletions/{completionId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+  }
+}
