@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useGoals } from "@/contexts/GoalsContext";
 import { useUserProfile } from "@/contexts/UserProfileContext";
-import { DAY_PART_LABELS } from "@/types/user";
+import { groupByDayPart } from "@/lib/groupByDayPart";
+import { formatPeriodRange } from "@/lib/dayPeriods";
 import type { Goal, GoalInput } from "@/types/goal";
 import { GoalFormModal } from "@/components/goals/GoalFormModal";
 import { HabitIcon } from "@/components/icons/HabitIcon";
+import { DayPartSection } from "@/components/ui/DayPartSection";
 import { Button } from "@/components/ui/Button";
 
 export default function GoalsPage() {
@@ -70,6 +72,21 @@ export default function GoalsPage() {
     }
   };
 
+  const groups = useMemo(() => {
+    const labels = Object.fromEntries(
+      (profile?.dayPeriods ?? []).map((p) => [p.key, p.label]),
+    );
+    return groupByDayPart(goals, labels);
+  }, [goals, profile?.dayPeriods]);
+
+  const rangeByKey = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const period of profile?.dayPeriods ?? []) {
+      map.set(period.key, formatPeriodRange(period));
+    }
+    return map;
+  }, [profile?.dayPeriods]);
+
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
@@ -85,13 +102,13 @@ export default function GoalsPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-[var(--radius)] border border-border bg-bg-elevated/50 px-4 py-3">
+        <div className="rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-3">
           <p className="text-xs text-faint">Current streak</p>
           <p className="mt-1 text-2xl font-medium text-foreground">
             {profile?.currentStreak ?? 0}
           </p>
         </div>
-        <div className="rounded-[var(--radius)] border border-border bg-bg-elevated/50 px-4 py-3">
+        <div className="rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-3">
           <p className="text-xs text-faint">Longest streak</p>
           <p className="mt-1 text-2xl font-medium text-foreground">
             {profile?.longestStreak ?? 0}
@@ -116,85 +133,98 @@ export default function GoalsPage() {
       ) : null}
 
       {!loading && !error && goals.length === 0 ? (
-        <div className="rounded-[var(--radius)] border border-border bg-bg-elevated/50 px-4 py-8 text-center text-sm text-muted">
+        <div className="rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-8 text-center text-sm text-muted">
           No active goals. Add one for today.
         </div>
       ) : null}
 
-      <ul className="flex flex-col gap-3">
-        {goals.map((goal) => {
-          const done = goal.status === "completed";
-          const leftover = isLeftover(goal);
-          return (
-            <li
-              key={goal.id}
-              className="rounded-[var(--radius)] border border-border bg-bg-elevated/50 px-4 py-3"
-            >
-              <div className="flex items-start gap-3">
-                <button
-                  type="button"
-                  onClick={() => void onToggle(goal)}
-                  className={[
-                    "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm",
-                    done
-                      ? "border-success bg-success-soft text-success"
-                      : "border-border text-faint",
-                  ].join(" ")}
-                  aria-label={done ? "Undo today" : "Complete today"}
-                >
-                  {done ? "✓" : ""}
-                </button>
+      <div className="flex flex-col gap-6">
+        {groups.map((group) => (
+          <DayPartSection
+            key={group.key}
+            dayPart={group.key}
+            label={group.label}
+            count={group.items.length}
+            rangeLabel={rangeByKey.get(group.key)}
+          >
+            <ul className="flex flex-col gap-3">
+              {group.items.map((goal) => {
+                const done = goal.status === "completed";
+                const leftover = isLeftover(goal);
+                return (
+                  <li
+                    key={goal.id}
+                    className="rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-3"
+                  >
+                    <div className="flex items-start gap-3">
+                      <button
+                        type="button"
+                        onClick={() => void onToggle(goal)}
+                        className={[
+                          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm",
+                          done
+                            ? "border-success bg-success-soft text-success"
+                            : "border-border text-faint",
+                        ].join(" ")}
+                        aria-label={done ? "Undo today" : "Complete today"}
+                      >
+                        {done ? "✓" : ""}
+                      </button>
 
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-accent">
-                      <HabitIcon iconKey={goal.icon} size={18} />
-                    </span>
-                    <p
-                      className={[
-                        "truncate font-medium",
-                        done
-                          ? "text-muted line-through"
-                          : "text-foreground",
-                      ].join(" ")}
-                    >
-                      {goal.title}
-                    </p>
-                    {leftover && !done ? (
-                      <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent">
-                        Leftover
-                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-accent">
+                            <HabitIcon iconKey={goal.icon} size={18} />
+                          </span>
+                          <p
+                            className={[
+                              "truncate font-medium",
+                              done
+                                ? "text-muted line-through"
+                                : "text-foreground",
+                            ].join(" ")}
+                          >
+                            {goal.title}
+                          </p>
+                          {leftover && !done ? (
+                            <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent">
+                              Leftover
+                            </span>
+                          ) : null}
+                        </div>
+                        {goal.description ? (
+                          <p className="mt-1 text-xs text-muted">
+                            {goal.description}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {!done ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openEdit(goal)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void onDelete(goal)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     ) : null}
-                  </div>
-                  <p className="mt-1 text-xs text-muted">
-                    {DAY_PART_LABELS[goal.dayPart]}
-                    {goal.description ? ` · ${goal.description}` : ""}
-                  </p>
-                </div>
-              </div>
-
-              {!done ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => openEdit(goal)}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void onDelete(goal)}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          </DayPartSection>
+        ))}
+      </div>
 
       <GoalFormModal
         open={modalOpen}
