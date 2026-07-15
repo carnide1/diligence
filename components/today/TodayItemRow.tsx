@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { Flag, GripVertical, Repeat } from "lucide-react";
 import type { TodayItem } from "@/lib/todayFeed";
 import { HabitIcon } from "@/components/icons/HabitIcon";
 
@@ -68,9 +68,6 @@ export function TodayItemRow({ item, onToggle }: TodayItemRowProps) {
             item.done ? "text-muted line-through" : "text-foreground",
           ].join(" ")}
         >
-          <span className="text-faint">
-            {item.kind === "habit" ? "Habit: " : "Goal: "}
-          </span>
           {item.title}
         </p>
         {item.kind === "goal" && item.leftover && !item.done ? (
@@ -79,6 +76,14 @@ export function TodayItemRow({ item, onToggle }: TodayItemRowProps) {
           </span>
         ) : null}
       </div>
+
+      <span
+        className="shrink-0 text-faint"
+        title={item.kind === "habit" ? "Habit" : "Goal"}
+        aria-label={item.kind === "habit" ? "Habit" : "Goal"}
+      >
+        {item.kind === "habit" ? <Repeat size={15} /> : <Flag size={15} />}
+      </span>
     </li>
   );
 }

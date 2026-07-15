@@ -131,13 +131,19 @@ export function HabitFormModal({
           <Button variant="ghost" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={submitting}>
+          <Button
+            onClick={submit}
+            disabled={
+              submitting ||
+              (scheduleType === "weekdays" && weekdays.length === 0)
+            }
+          >
             {submitting ? "Saving…" : "Save"}
           </Button>
         </>
       }
     >
-      <form className="flex flex-col gap-4" onSubmit={submit}>
+      <form className="flex flex-col gap-6" onSubmit={submit}>
         <TextInput
           label="Title"
           error={errors.title?.message}
@@ -150,10 +156,10 @@ export function HabitFormModal({
         />
         <IconPicker value={icon} onChange={setIcon} />
 
-        <label className="flex flex-col gap-1.5 text-sm">
+        <label className="flex flex-col gap-2 text-sm">
           <span className="font-medium text-muted">Day part</span>
           <select
-            className="h-10 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-foreground"
+            className="h-10 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-foreground"
             {...register("dayPart")}
           >
             {DAY_PART_KEYS.map((key) => (
@@ -164,20 +170,20 @@ export function HabitFormModal({
           </select>
         </label>
 
-        <label className="flex flex-col gap-1.5 text-sm">
+        <label className="flex flex-col gap-2 text-sm">
           <span className="font-medium text-muted">Schedule</span>
           <select
-            className="h-10 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-foreground"
+            className="h-10 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-foreground"
             {...register("scheduleType")}
           >
             <option value="everyDay">Every day</option>
             <option value="weekdays">Specific weekdays</option>
-            <option value="timesPerWeek">N times per week</option>
+            <option value="timesPerWeek">Variable total days / week</option>
           </select>
         </label>
 
         {scheduleType === "weekdays" ? (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <span className="text-sm font-medium text-muted">Days</span>
             <div className="flex flex-wrap gap-1.5">
               {WEEKDAY_OPTIONS.map((day) => {
@@ -207,7 +213,7 @@ export function HabitFormModal({
 
         {scheduleType === "timesPerWeek" ? (
           <TextInput
-            label="Times per week"
+            label="Total days / week"
             type="number"
             min={1}
             max={7}
@@ -215,6 +221,9 @@ export function HabitFormModal({
             {...register("timesPerWeek", { valueAsNumber: true })}
           />
         ) : null}
+
+        {/* Room so native select menus aren't jammed against the footer */}
+        <div className="h-2 shrink-0" aria-hidden />
       </form>
     </Modal>
   );

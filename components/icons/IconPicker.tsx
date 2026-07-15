@@ -11,7 +11,7 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
   return (
     <div className="space-y-1.5">
       <span className="text-sm font-medium text-muted">Icon</span>
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="grid max-h-48 grid-cols-7 gap-1.5 overflow-y-auto pr-0.5">
         {HABIT_ICONS.map(({ key, label, Icon }) => {
           const active = value === key;
           return (

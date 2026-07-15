@@ -97,7 +97,7 @@ export function GoalFormModal({
         </>
       }
     >
-      <form className="flex flex-col gap-4" onSubmit={submit}>
+      <form className="flex flex-col gap-6" onSubmit={submit}>
         <TextInput
           label="Title"
           error={errors.title?.message}

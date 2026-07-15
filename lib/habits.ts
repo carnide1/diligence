@@ -66,6 +66,24 @@ function mapHabit(id: string, data: Record<string, unknown>): Habit {
           ? toLocalDateString((data.deletedAt as Timestamp).toDate())
           : String(data.deletedAt);
 
+  let createdLocalDate =
+    typeof data.createdLocalDate === "string" ? data.createdLocalDate : null;
+  if (!createdLocalDate && data.createdAt) {
+    if (
+      typeof data.createdAt === "object" &&
+      "toDate" in data.createdAt &&
+      typeof (data.createdAt as Timestamp).toDate === "function"
+    ) {
+      createdLocalDate = toLocalDateString(
+        (data.createdAt as Timestamp).toDate(),
+      );
+    }
+  }
+  if (!createdLocalDate) {
+    // Legacy docs without timestamps: keep historic calendar visibility.
+    createdLocalDate = "1970-01-01";
+  }
+
   return {
     id,
     title: typeof data.title === "string" ? data.title : "",
@@ -85,6 +103,7 @@ function mapHabit(id: string, data: Record<string, unknown>): Habit {
       typeof data.lastResolvedLocalDate === "string"
         ? data.lastResolvedLocalDate
         : null,
+    createdLocalDate,
     deletedAt,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
@@ -113,6 +132,7 @@ export async function createHabit(
     (await listHabits(uid)).reduce((max, h) => Math.max(max, h.order), -1) + 1;
 
   const yesterday = yesterdayLocalDate();
+  const today = toLocalDateString();
   const payload = {
     title: input.title.trim(),
     description: input.description.trim(),
@@ -125,6 +145,7 @@ export async function createHabit(
     longestStreak: 0,
     // Caught up through yesterday so today's miss is resolved tomorrow.
     lastResolvedLocalDate: yesterday,
+    createdLocalDate: today,
     deletedAt: null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),

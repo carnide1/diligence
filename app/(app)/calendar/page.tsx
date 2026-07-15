@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Flag,
+  Repeat,
+} from "lucide-react";
+import { format, setMonth, setYear } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserProfile } from "@/contexts/UserProfileContext";
 import { listHabits, listAllHabitCompletions } from "@/lib/habits";
@@ -22,11 +30,28 @@ import type { HabitCompletion } from "@/types/habit";
 import type { GoalCompletion } from "@/types/goal";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
 
 export default function CalendarPage() {
   const { user } = useAuth();
   const { profile } = useUserProfile();
   const [anchor, setAnchor] = useState(() => new Date());
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerYear, setPickerYear] = useState(() => new Date().getFullYear());
+  const monthPickerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -74,6 +99,20 @@ export default function CalendarPage() {
     };
   }, [user]);
 
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (
+        monthPickerRef.current &&
+        !monthPickerRef.current.contains(event.target as Node)
+      ) {
+        setPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [pickerOpen]);
+
   const days = useMemo(
     () =>
       buildCalendarDays({
@@ -102,30 +141,134 @@ export default function CalendarPage() {
     [days, profile, bestHabitStreak],
   );
 
+  const openPicker = () => {
+    setPickerYear(anchor.getFullYear());
+    setPickerOpen((open) => !open);
+  };
+
+  const selectMonth = (monthIndex: number) => {
+    setAnchor(setMonth(setYear(anchor, pickerYear), monthIndex));
+    setPickerOpen(false);
+  };
+
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-3xl tracking-tight text-foreground">
           Calendar
         </h1>
-        <div className="flex items-center gap-2">
+        <div className="relative flex items-center gap-1" ref={monthPickerRef}>
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => setAnchor((d) => shiftMonth(d, -1))}
+            aria-label="Previous month"
+            onClick={() => {
+              setAnchor((d) => shiftMonth(d, -1));
+              setPickerOpen(false);
+            }}
+            className="!px-2"
           >
-            Prev
+            <ChevronLeft size={18} />
           </Button>
-          <p className="min-w-[9rem] text-center text-sm text-muted">
+
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={pickerOpen}
+            onClick={openPicker}
+            className="inline-flex h-8 min-w-[9.5rem] items-center justify-center gap-1 rounded-[var(--radius-sm)] border border-border bg-bg-overlay px-3 text-sm font-medium text-foreground transition-colors hover:border-border-strong"
+          >
             {monthLabel(anchor)}
-          </p>
+            <ChevronDown
+              size={14}
+              className={[
+                "text-faint transition-transform",
+                pickerOpen ? "rotate-180" : "",
+              ].join(" ")}
+            />
+          </button>
+
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => setAnchor((d) => shiftMonth(d, 1))}
+            aria-label="Next month"
+            onClick={() => {
+              setAnchor((d) => shiftMonth(d, 1));
+              setPickerOpen(false);
+            }}
+            className="!px-2"
           >
-            Next
+            <ChevronRight size={18} />
           </Button>
+
+          {pickerOpen ? (
+            <div
+              role="dialog"
+              aria-label="Choose month"
+              className="absolute right-0 top-full z-20 mt-2 w-64 rounded-[var(--radius)] border border-border bg-bg-elevated p-3 shadow-lg"
+            >
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  aria-label="Previous year"
+                  className="rounded-[var(--radius-sm)] p-1.5 text-muted hover:bg-bg-overlay hover:text-foreground"
+                  onClick={() => setPickerYear((y) => y - 1)}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <p className="text-sm font-medium text-foreground">
+                  {pickerYear}
+                </p>
+                <button
+                  type="button"
+                  aria-label="Next year"
+                  className="rounded-[var(--radius-sm)] p-1.5 text-muted hover:bg-bg-overlay hover:text-foreground"
+                  onClick={() => setPickerYear((y) => y + 1)}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {MONTH_SHORT.map((label, monthIndex) => {
+                  const isSelected =
+                    anchor.getFullYear() === pickerYear &&
+                    anchor.getMonth() === monthIndex;
+                  const isCurrent =
+                    new Date().getFullYear() === pickerYear &&
+                    new Date().getMonth() === monthIndex;
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => selectMonth(monthIndex)}
+                      className={[
+                        "rounded-[var(--radius-sm)] px-2 py-2 text-sm transition-colors",
+                        isSelected
+                          ? "bg-accent text-bg"
+                          : isCurrent
+                            ? "bg-accent-soft text-accent hover:brightness-110"
+                            : "text-foreground hover:bg-bg-overlay",
+                      ].join(" ")}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                className="mt-3 w-full rounded-[var(--radius-sm)] px-2 py-1.5 text-xs text-muted hover:bg-bg-overlay hover:text-foreground"
+                onClick={() => {
+                  const now = new Date();
+                  setAnchor(now);
+                  setPickerYear(now.getFullYear());
+                  setPickerOpen(false);
+                }}
+              >
+                Today · {format(new Date(), "MMM yyyy")}
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -176,7 +319,7 @@ export default function CalendarPage() {
               onMouseEnter={() => day.inMonth && setHovered(day)}
               onMouseLeave={() => setHovered(null)}
               className={[
-                "min-h-[4.25rem] border-b border-r border-border p-1.5 text-left transition-colors last:border-r-0",
+                "min-h-[4.75rem] border-b border-r border-border p-1.5 text-left transition-colors last:border-r-0",
                 day.inMonth
                   ? "hover:bg-bg-overlay/70"
                   : "bg-bg/40 text-faint",
@@ -190,7 +333,7 @@ export default function CalendarPage() {
               <div className="flex items-start justify-between gap-1">
                 <span
                   className={[
-                    "text-xs",
+                    "text-sm",
                     day.inMonth ? "text-muted" : "text-faint",
                     day.isToday ? "font-semibold text-accent" : "",
                   ].join(" ")}
@@ -205,21 +348,29 @@ export default function CalendarPage() {
       </div>
 
       {hovered && !selected ? (
-        <div className="hidden rounded-[var(--radius)] border border-border bg-bg-elevated/70 px-4 py-3 md:block">
+        <div className="hidden rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-3 md:block">
           <p className="text-xs text-faint">{hovered.localDate}</p>
           {hovered.items.length === 0 ? (
             <p className="mt-1 text-sm text-muted">No items</p>
           ) : (
             <ul className="mt-2 space-y-1">
               {hovered.items.slice(0, 4).map((item) => (
-                <li key={`${item.kind}-${item.id}`} className="text-sm text-foreground">
-                  <span className="text-faint">
-                    {item.kind === "habit" ? "Habit: " : "Goal: "}
+                <li
+                  key={`${item.kind}-${item.id}`}
+                  className="flex items-center gap-2 text-sm text-foreground"
+                >
+                  <span className="text-accent">
+                    <HabitIcon iconKey={item.icon} size={18} />
                   </span>
-                  {item.title}
-                  <span className="text-muted">
-                    {" "}
-                    ·{" "}
+                  <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                  <span className="shrink-0 text-faint">
+                    {item.kind === "habit" ? (
+                      <Repeat size={14} />
+                    ) : (
+                      <Flag size={14} />
+                    )}
+                  </span>
+                  <span className="shrink-0 text-muted">
                     {item.completedAtLabel
                       ? item.completedAtLabel
                       : item.status}
@@ -259,15 +410,22 @@ export default function CalendarPage() {
                     className="flex items-start gap-2 text-sm"
                   >
                     <span className="mt-0.5 text-accent">
-                      <HabitIcon iconKey={item.icon} size={16} />
+                      <HabitIcon iconKey={item.icon} size={22} />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-foreground">
-                        <span className="text-faint">
-                          {item.kind === "habit" ? "Habit: " : "Goal: "}
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-foreground">{item.title}</p>
+                        <span
+                          className="shrink-0 text-faint"
+                          title={item.kind === "habit" ? "Habit" : "Goal"}
+                        >
+                          {item.kind === "habit" ? (
+                            <Repeat size={14} />
+                          ) : (
+                            <Flag size={14} />
+                          )}
                         </span>
-                        {item.title}
-                      </p>
+                      </div>
                       <p className="text-xs text-muted">
                         {item.status === "completed" && item.completedAtLabel
                           ? `Completed at ${item.completedAtLabel}`
@@ -301,7 +459,7 @@ function SummaryChip({
   hint: string;
 }) {
   return (
-    <div className="rounded-[var(--radius)] border border-border bg-bg-elevated/50 px-3 py-2">
+    <div className="rounded-[var(--radius)] border border-border bg-bg-elevated px-3 py-2">
       <p className="text-[10px] uppercase tracking-wide text-faint">{label}</p>
       <p className="mt-0.5 text-lg font-medium text-foreground">{value}</p>
       <p className="text-[11px] text-muted">{hint}</p>
@@ -335,5 +493,9 @@ function ToneMark({
         : tone === "upcoming"
           ? "text-accent"
           : "text-muted";
-  return <span className={`text-xs ${color}`}>{mark}</span>;
+  return (
+    <span className={`text-base font-semibold leading-none ${color}`}>
+      {mark}
+    </span>
+  );
 }

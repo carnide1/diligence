@@ -49,7 +49,7 @@ export function describeSchedule(schedule: HabitSchedule): string {
       return labels.join(", ");
     }
     case "timesPerWeek":
-      return `${schedule.n}× / week`;
+      return `Variable · ${schedule.n} ${schedule.n === 1 ? "day" : "days"} / week`;
     default:
       return "";
   }

@@ -11,6 +11,7 @@ import type { Habit, HabitCompletion } from "../types/habit";
 import type { Goal, GoalCompletion } from "../types/goal";
 import {
   compareLocalDates,
+  dayOfWeek,
   eachLocalDate,
   toLocalDateString,
   weekBounds,
@@ -128,10 +129,18 @@ function habitVisibleOnDay(args: {
   habit: Habit;
   localDate: string;
   isFuture: boolean;
+  isToday: boolean;
   completion: HabitCompletion | undefined;
   allCompletions: HabitCompletion[];
 }): boolean {
-  const { habit, localDate, isFuture, completion, allCompletions } = args;
+  const {
+    habit,
+    localDate,
+    isFuture,
+    isToday,
+    completion,
+    allCompletions,
+  } = args;
 
   if (habit.deletedAt && compareLocalDates(habit.deletedAt, localDate) <= 0) {
     return Boolean(completion);
@@ -139,20 +148,38 @@ function habitVisibleOnDay(args: {
 
   if (completion) return true;
 
-  if (habit.paused) return false;
+  // Habit did not exist yet — do not count as a miss.
+  if (compareLocalDates(habit.createdLocalDate, localDate) > 0) {
+    return false;
+  }
 
-  if (isFuture) {
-    const weekCount = completionsByHabitWeek(
+  // Pause only affects today and future — keep calendar history intact.
+  if (habit.paused && (isFuture || isToday)) {
+    return false;
+  }
+
+  if (habit.schedule.type === "timesPerWeek") {
+    const weekTotal = completionsByHabitWeek(
       allCompletions,
       localDate,
       habit.id,
     );
-    return isHabitDueOn(habit, localDate, weekCount);
+    if (isFuture) {
+      return isHabitDueOn(habit, localDate, weekTotal);
+    }
+    // Quota met — only completed days remain visible (handled above).
+    if (weekTotal >= habit.schedule.n) {
+      return false;
+    }
+    // Cap empty miss slots to the remaining quota for the week.
+    const prior = weekCountBeforeDay(allCompletions, localDate, habit.id);
+    const emptiesBefore = Math.max(0, dayOfWeek(localDate) - prior);
+    const remainingNeeded = habit.schedule.n - weekTotal;
+    return emptiesBefore < remainingNeeded;
   }
 
-  if (habit.schedule.type === "timesPerWeek") {
-    const prior = weekCountBeforeDay(allCompletions, localDate, habit.id);
-    return prior < habit.schedule.n;
+  if (isFuture) {
+    return isHabitDueOn(habit, localDate, 0);
   }
 
   return isScheduledOn(habit.schedule, localDate);
@@ -200,6 +227,7 @@ export function buildCalendarDays(args: {
         habit,
         localDate,
         isFuture,
+        isToday,
         completion,
         allCompletions: args.habitCompletions,
       });
@@ -351,6 +379,7 @@ export function monthHabitCompletionRate(args: {
         habit,
         localDate,
         isFuture: false,
+        isToday: localDate === args.today,
         completion,
         allCompletions: args.completions,
       });

@@ -41,8 +41,8 @@ function NavLink({
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-dvh md:grid md:grid-cols-[var(--sidebar-width)_1fr]">
-      <aside className="hidden border-r border-border bg-bg-elevated/80 md:flex md:flex-col md:gap-6 md:p-5">
+    <div className="min-h-dvh bg-bg md:grid md:grid-cols-[var(--sidebar-width)_1fr]">
+      <aside className="hidden border-r border-border bg-bg-elevated md:flex md:flex-col md:gap-6 md:p-5">
         <div>
           <p className="font-display text-2xl tracking-tight text-foreground">
             Diligence
@@ -56,17 +56,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
 
-      <div className="flex min-h-dvh flex-col">
-        <header className="flex items-center border-b border-border px-4 py-3 md:hidden">
+      <div className="flex min-h-dvh flex-col bg-bg">
+        <header className="flex items-center border-b border-border bg-bg px-4 py-3 md:hidden">
           <p className="font-display text-xl text-foreground">Diligence</p>
         </header>
 
-        <main className="flex-1 px-4 py-5 pb-[calc(var(--nav-height)+1rem)] md:px-8 md:pb-8">
+        <main className="relative flex-1 bg-bg px-4 py-5 pb-[calc(var(--nav-height)+1rem)] md:px-8 md:pb-8">
           {children}
         </main>
 
         <nav
-          className="fixed inset-x-0 bottom-0 z-40 flex h-[var(--nav-height)] border-t border-border bg-bg-elevated/95 backdrop-blur-sm md:hidden"
+          className="fixed inset-x-0 bottom-0 z-40 flex h-[var(--nav-height)] border-t border-border bg-bg-elevated md:hidden"
           aria-label="Primary"
         >
           {NAV_ITEMS.map((item) => (

@@ -181,6 +181,10 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
         await setHabitCompletion(user.uid, id, today);
         await updateHabit(user.uid, id, streaks);
         setTodayCompletions((prev) => ({ ...prev, [id]: true }));
+        setWeekCompletionCounts((prev) => ({
+          ...prev,
+          [id]: (prev[id] ?? 0) + 1,
+        }));
         setHabits((prev) =>
           prev.map((h) => (h.id === id ? { ...h, ...streaks } : h)),
         );
@@ -189,6 +193,10 @@ export function HabitsProvider({ children }: { children: ReactNode }) {
         await clearHabitCompletion(user.uid, id, today);
         await updateHabit(user.uid, id, streaks);
         setTodayCompletions((prev) => ({ ...prev, [id]: false }));
+        setWeekCompletionCounts((prev) => ({
+          ...prev,
+          [id]: Math.max(0, (prev[id] ?? 0) - 1),
+        }));
         setHabits((prev) =>
           prev.map((h) => (h.id === id ? { ...h, ...streaks } : h)),
         );

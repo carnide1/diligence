@@ -73,39 +73,40 @@ export function DayPeriodsEditor() {
         <h2 className="text-lg font-medium text-foreground">Day periods</h2>
         <p className="mt-1 text-sm text-muted">
           Ranges must cover 24 hours with no gaps. Editing one end snaps the
-          neighbor (Tomorrow’s Today headers will reuse this).
+          neighbor.
         </p>
       </div>
 
-      <ul className="space-y-3">
-        {periods.map((period) => (
-          <li
-            key={period.key}
-            className="rounded-[var(--radius)] border border-border bg-bg-elevated/50 px-3 py-3"
-          >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="font-medium text-foreground">{period.label}</span>
-              <span className="text-xs text-faint">
-                {formatPeriodRange(period)}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <TextInput
-                label="Start"
-                defaultValue={minutesToLabel(period.startMinutes)}
-                key={`${period.key}-start-${period.startMinutes}`}
-                onBlur={(e) => onStartChange(period.key, e.target.value)}
-              />
-              <TextInput
-                label="End"
-                defaultValue={minutesToLabel(period.endMinutes)}
-                key={`${period.key}-end-${period.endMinutes}`}
-                onBlur={(e) => onEndChange(period.key, e.target.value)}
-              />
-            </div>
-          </li>
-        ))}
-      </ul>
+      <div className="overflow-hidden rounded-[var(--radius)] border border-border bg-bg-elevated">
+        <ul className="divide-y divide-border/60">
+          {periods.map((period) => (
+            <li key={period.key} className="px-4 py-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <span className="font-medium text-foreground">
+                  {period.label}
+                </span>
+                <span className="text-xs text-faint">
+                  {formatPeriodRange(period)}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <TextInput
+                  label="Start"
+                  defaultValue={minutesToLabel(period.startMinutes)}
+                  key={`${period.key}-start-${period.startMinutes}`}
+                  onBlur={(e) => onStartChange(period.key, e.target.value)}
+                />
+                <TextInput
+                  label="End"
+                  defaultValue={minutesToLabel(period.endMinutes)}
+                  key={`${period.key}-end-${period.endMinutes}`}
+                  onBlur={(e) => onEndChange(period.key, e.target.value)}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <div className="flex gap-2">
         <Button onClick={onSave} disabled={!dirty || saving}>

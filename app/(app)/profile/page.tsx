@@ -28,13 +28,22 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-10">
-      <div className="space-y-2">
-        <h1 className="font-display text-3xl tracking-tight text-foreground">
-          Profile
-        </h1>
-        <p className="text-sm text-muted">
-          Account details, day periods, and summary stats.
-        </p>
+      <div className="flex items-start justify-between gap-6">
+        <div className="min-w-0 space-y-2">
+          <h1 className="font-display text-3xl tracking-tight text-foreground">
+            Profile
+          </h1>
+          <p className="text-sm text-muted">
+            Account details, day periods, and summary stats.
+          </p>
+        </div>
+        <Button
+          variant="secondary"
+          onClick={onLogout}
+          className="mt-1 shrink-0"
+        >
+          Log out
+        </Button>
       </div>
 
       {profileLoading ? (
@@ -62,18 +71,19 @@ export default function ProfilePage() {
             <ProfileNameForm />
           </section>
 
-          <DayPeriodsEditor />
-
           <section className="space-y-3">
             <h2 className="text-lg font-medium text-foreground">Stats</h2>
             {statsLoading && !stats ? (
               <p className="text-sm text-muted">Loading stats…</p>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <StatCard
-                  label="Goal streak"
-                  value={`${stats?.goalCurrent ?? profile.currentStreak} / ${stats?.goalLongest ?? profile.longestStreak}`}
-                  hint="Current / longest"
+                  label="Current goal streak"
+                  value={`${stats?.goalCurrent ?? profile.currentStreak}`}
+                />
+                <StatCard
+                  label="Longest goal streak"
+                  value={`${stats?.goalLongest ?? profile.longestStreak}`}
                 />
                 <StatCard
                   label="Best habit streak"
@@ -94,21 +104,20 @@ export default function ProfilePage() {
                   }
                 />
                 <StatCard
-                  label="Active items"
-                  value={`${stats?.activeHabits ?? 0} / ${stats?.activeGoals ?? 0}`}
-                  hint="Habits / goals"
+                  label="Active habits"
+                  value={`${stats?.activeHabits ?? 0}`}
+                />
+                <StatCard
+                  label="Active goals"
+                  value={`${stats?.activeGoals ?? 0}`}
                 />
               </div>
             )}
           </section>
+
+          <DayPeriodsEditor />
         </>
       ) : null}
-
-      <div>
-        <Button variant="secondary" onClick={onLogout}>
-          Log out
-        </Button>
-      </div>
     </div>
   );
 }
@@ -120,13 +129,13 @@ function StatCard({
 }: {
   label: string;
   value: string;
-  hint: string;
+  hint?: string;
 }) {
   return (
-    <div className="rounded-[var(--radius)] border border-border bg-bg-elevated/50 px-4 py-3">
+    <div className="rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-3">
       <p className="text-xs text-faint">{label}</p>
       <p className="mt-1 text-xl font-medium text-foreground">{value}</p>
-      <p className="mt-1 text-xs text-muted">{hint}</p>
+      {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
     </div>
   );
 }

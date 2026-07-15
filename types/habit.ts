@@ -18,6 +18,8 @@ export type Habit = {
   longestStreak: number;
   /** YYYY-MM-DD; last day-boundary date fully resolved for this habit. */
   lastResolvedLocalDate: string | null;
+  /** YYYY-MM-DD; first local day this habit exists (calendar / rate gate). */
+  createdLocalDate: string;
   deletedAt: string | null;
   createdAt?: unknown;
   updatedAt?: unknown;

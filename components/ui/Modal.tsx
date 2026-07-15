@@ -33,10 +33,10 @@ export function Modal({ open, title, onClose, children, footer }: ModalProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className="flex max-h-[90vh] w-full max-w-md flex-col rounded-t-[var(--radius)] border border-border bg-bg-elevated sm:rounded-[var(--radius)]"
+        className="flex max-h-[min(92vh,40rem)] w-full max-w-md flex-col overflow-hidden rounded-t-[var(--radius)] border border-border bg-bg-elevated sm:rounded-[var(--radius)]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
           <h2 id="modal-title" className="font-display text-lg text-foreground">
             {title}
           </h2>
@@ -44,9 +44,11 @@ export function Modal({ open, title, onClose, children, footer }: ModalProps) {
             Close
           </Button>
         </div>
-        <div className="overflow-y-auto px-4 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5">
+          {children}
+        </div>
         {footer ? (
-          <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-border px-4 py-3">
             {footer}
           </div>
         ) : null}
