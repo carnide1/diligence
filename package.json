@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test lib/dayPeriods.test.ts lib/habitStreaks.test.ts lib/goalStreaks.test.ts lib/todayFeed.test.ts lib/calendarData.test.ts lib/groupByDayPart.test.ts"
+    "test": "tsx --test lib/dayPeriods.test.ts lib/habitStreaks.test.ts lib/goalStreaks.test.ts lib/todayFeed.test.ts lib/calendarData.test.ts lib/groupByDayPart.test.ts lib/letterboxd.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
