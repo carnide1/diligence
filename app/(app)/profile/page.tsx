@@ -8,6 +8,8 @@ import { useProfileStats } from "@/hooks/useProfileStats";
 import { DayPeriodsEditor } from "@/components/profile/DayPeriodsEditor";
 import { ProfileNameForm } from "@/components/profile/ProfileNameForm";
 import { Button } from "@/components/ui/Button";
+import { StatTile } from "@/components/ui/StatTile";
+import { toErrorMessage } from "@/lib/errors";
 
 export default function ProfilePage() {
   const { logout } = useAuth();
@@ -22,7 +24,7 @@ export default function ProfilePage() {
       toast.success("Signed out");
       router.replace("/login");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Logout failed");
+      toast.error(toErrorMessage(error, "Logout failed"));
     }
   };
 
@@ -77,15 +79,15 @@ export default function ProfilePage() {
               <p className="text-sm text-muted">Loading stats…</p>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <StatCard
+                <StatTile
                   label="Current goal streak"
-                  value={`${stats?.goalCurrent ?? profile.currentStreak}`}
+                  value={stats?.goalCurrent ?? profile.currentStreak}
                 />
-                <StatCard
+                <StatTile
                   label="Longest goal streak"
-                  value={`${stats?.goalLongest ?? profile.longestStreak}`}
+                  value={stats?.goalLongest ?? profile.longestStreak}
                 />
-                <StatCard
+                <StatTileWithHint
                   label="Best habit streak"
                   value={`${stats?.bestHabitStreak ?? 0}`}
                   hint={
@@ -94,7 +96,7 @@ export default function ProfilePage() {
                       : "No habits yet"
                   }
                 />
-                <StatCard
+                <StatTileWithHint
                   label="This month"
                   value={`${stats?.monthRate ?? 0}%`}
                   hint={
@@ -103,13 +105,13 @@ export default function ProfilePage() {
                       : "Habit completion rate"
                   }
                 />
-                <StatCard
+                <StatTile
                   label="Active habits"
-                  value={`${stats?.activeHabits ?? 0}`}
+                  value={stats?.activeHabits ?? 0}
                 />
-                <StatCard
+                <StatTile
                   label="Active goals"
-                  value={`${stats?.activeGoals ?? 0}`}
+                  value={stats?.activeGoals ?? 0}
                 />
               </div>
             )}
@@ -122,7 +124,7 @@ export default function ProfilePage() {
   );
 }
 
-function StatCard({
+function StatTileWithHint({
   label,
   value,
   hint,
@@ -134,7 +136,7 @@ function StatCard({
   return (
     <div className="rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-3">
       <p className="text-xs text-faint">{label}</p>
-      <p className="mt-1 text-xl font-medium text-foreground">{value}</p>
+      <p className="mt-1 text-2xl font-medium text-foreground">{value}</p>
       {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
     </div>
   );

@@ -8,6 +8,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
   type Timestamp,
 } from "firebase/firestore";
 import { getFirebaseDb } from "./firebase";
@@ -263,4 +264,43 @@ export async function clearHabitCompletion(
   localDate: string,
 ): Promise<void> {
   await deleteDoc(completionRef(uid, habitId, localDate));
+}
+
+/** Atomically write completion + streak fields (or clear + undo streaks). */
+export async function applyHabitCompletionToggle(
+  uid: string,
+  habitId: string,
+  localDate: string,
+  completed: boolean,
+  streaks: {
+    currentStreak: number;
+    longestStreak: number;
+    lastResolvedLocalDate?: string | null;
+  },
+): Promise<void> {
+  const batch = writeBatch(getFirebaseDb());
+  const cRef = completionRef(uid, habitId, localDate);
+  if (completed) {
+    batch.set(
+      cRef,
+      {
+        habitId,
+        localDate,
+        completedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+  } else {
+    batch.delete(cRef);
+  }
+  const habitPatch: Record<string, unknown> = {
+    currentStreak: streaks.currentStreak,
+    longestStreak: streaks.longestStreak,
+    updatedAt: serverTimestamp(),
+  };
+  if (streaks.lastResolvedLocalDate !== undefined) {
+    habitPatch.lastResolvedLocalDate = streaks.lastResolvedLocalDate;
+  }
+  batch.update(habitRef(uid, habitId), habitPatch);
+  await batch.commit();
 }

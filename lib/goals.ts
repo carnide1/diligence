@@ -1,6 +1,5 @@
 import {
   collection,
-  deleteDoc,
   doc,
   getDocs,
   query,
@@ -8,6 +7,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { getFirebaseDb } from "./firebase";
 import { DEFAULT_HABIT_ICON } from "./habitIcons";
@@ -220,7 +220,8 @@ export async function completeGoalToday(
   goalId: string,
   localDate: string = toLocalDateString(),
 ): Promise<void> {
-  await setDoc(
+  const batch = writeBatch(getFirebaseDb());
+  batch.set(
     completionRef(uid, goalId, localDate),
     {
       goalId,
@@ -229,10 +230,11 @@ export async function completeGoalToday(
     },
     { merge: true },
   );
-  await updateDoc(goalRef(uid, goalId), {
+  batch.update(goalRef(uid, goalId), {
     status: "completed",
     updatedAt: serverTimestamp(),
   });
+  await batch.commit();
 }
 
 export async function undoGoalCompletionToday(
@@ -240,9 +242,11 @@ export async function undoGoalCompletionToday(
   goalId: string,
   localDate: string = toLocalDateString(),
 ): Promise<void> {
-  await deleteDoc(completionRef(uid, goalId, localDate));
-  await updateDoc(goalRef(uid, goalId), {
+  const batch = writeBatch(getFirebaseDb());
+  batch.delete(completionRef(uid, goalId, localDate));
+  batch.update(goalRef(uid, goalId), {
     status: "active",
     updatedAt: serverTimestamp(),
   });
+  await batch.commit();
 }

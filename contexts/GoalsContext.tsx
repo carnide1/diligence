@@ -24,6 +24,7 @@ import {
 import { catchUpGoalStreaks, isLeftoverGoal } from "@/lib/goalStreaks";
 import { updateUserGoalStreaks } from "@/lib/users";
 import { toLocalDateString } from "@/lib/dates";
+import { toErrorMessage } from "@/lib/errors";
 import type { Goal, GoalInput } from "@/types/goal";
 import type { UserProfile } from "@/types/user";
 
@@ -37,7 +38,7 @@ type GoalsContextValue = {
   deleteGoal: (id: string) => Promise<void>;
   toggleToday: (goal: Goal) => Promise<void>;
   isLeftover: (goal: Goal) => boolean;
-  reorderGoals: (orderedIds: string[]) => Promise<void>;
+  reorderGoals: (orders: { id: string; order: number }[]) => Promise<void>;
 };
 
 const GoalsContext = createContext<GoalsContextValue | null>(null);
@@ -96,7 +97,7 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
       setGoals(listed);
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "Failed to load goals");
+      setError(toErrorMessage(err, "Failed to load goals"));
     } finally {
       setLoading(false);
     }
@@ -167,26 +168,20 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const reorderGoals = useCallback(
-    async (orderedIds: string[]) => {
+    async (orders: { id: string; order: number }[]) => {
       if (!user) throw new Error("Sign in required");
+      if (orders.length === 0) return;
       await Promise.all(
-        orderedIds.map((id, index) =>
-          updateGoal(user.uid, id, { order: index }),
-        ),
+        orders.map(({ id, order }) => updateGoal(user.uid, id, { order })),
       );
-      setGoals((prev) => {
-        const byId = new Map(prev.map((g) => [g.id, g]));
-        const reordered = orderedIds
-          .map((id, index) => {
-            const g = byId.get(id);
-            return g ? { ...g, order: index } : null;
-          })
-          .filter((g): g is Goal => g !== null);
-        const untouched = prev.filter((g) => !orderedIds.includes(g.id));
-        return [...reordered, ...untouched].sort(
-          (a, b) => a.order - b.order || a.title.localeCompare(b.title),
-        );
-      });
+      const orderById = new Map(orders.map((o) => [o.id, o.order]));
+      setGoals((prev) =>
+        prev
+          .map((g) =>
+            orderById.has(g.id) ? { ...g, order: orderById.get(g.id)! } : g,
+          )
+          .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title)),
+      );
     },
     [user],
   );

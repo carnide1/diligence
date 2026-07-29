@@ -1,16 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
-import {
-  adjustPeriodEnd,
-  adjustPeriodStart,
-  labelToMinutes,
-  minutesToLabel,
-  validateDayPeriods,
-} from "@/lib/dayPeriods";
-import { useUserProfile } from "@/contexts/UserProfileContext";
-import type { DayPartKey, DayPeriod } from "@/types/user";
+import { minutesToLabel } from "@/lib/dayPeriods";
+import { useDayPeriodsDraft } from "@/hooks/useDayPeriodsDraft";
+import type { DayPartKey } from "@/types/user";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { TextInput } from "@/components/ui/TextInput";
@@ -26,45 +18,19 @@ export function DayPartEditModal({
   dayPart,
   onClose,
 }: DayPartEditModalProps) {
-  const { profile, saveDayPeriods } = useUserProfile();
-  const [draft, setDraft] = useState<DayPeriod[] | null>(null);
-  const [saving, setSaving] = useState(false);
+  const { periods, saving, onStartChange, onEndChange, save } =
+    useDayPeriodsDraft({
+      seedOnActivate: true,
+      active: open,
+    });
 
-  useEffect(() => {
-    if (!open || !profile) return;
-    const timer = setTimeout(() => setDraft(profile.dayPeriods.map((p) => ({ ...p }))), 0);
-    return () => clearTimeout(timer);
-  }, [open, profile, dayPart]);
-
-  const periods = draft ?? profile?.dayPeriods ?? [];
   const period = dayPart
     ? periods.find((p) => p.key === dayPart)
     : undefined;
 
-  const apply = (result: DayPeriod[] | { error: string }) => {
-    if ("error" in result) {
-      toast.error(result.error);
-      return;
-    }
-    setDraft(result);
-  };
-
   const onSave = async () => {
-    const error = validateDayPeriods(periods);
-    if (error) {
-      toast.error(error);
-      return;
-    }
-    setSaving(true);
-    try {
-      await saveDayPeriods(periods);
-      toast.success("Day period updated");
-      onClose();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
+    const ok = await save("Day period updated");
+    if (ok) onClose();
   };
 
   if (!period || !dayPart) {
@@ -100,21 +66,13 @@ export function DayPartEditModal({
             label="Start"
             key={`start-${period.startMinutes}`}
             defaultValue={minutesToLabel(period.startMinutes)}
-            onBlur={(e) => {
-              const minutes = labelToMinutes(e.target.value);
-              if (minutes === null) return;
-              apply(adjustPeriodStart(periods, dayPart, minutes));
-            }}
+            onBlur={(e) => onStartChange(dayPart, e.target.value)}
           />
           <TextInput
             label="End"
             key={`end-${period.endMinutes}`}
             defaultValue={minutesToLabel(period.endMinutes)}
-            onBlur={(e) => {
-              const minutes = labelToMinutes(e.target.value);
-              if (minutes === null) return;
-              apply(adjustPeriodEnd(periods, dayPart, minutes));
-            }}
+            onBlur={(e) => onEndChange(dayPart, e.target.value)}
           />
         </div>
       </div>

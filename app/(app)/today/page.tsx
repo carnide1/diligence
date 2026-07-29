@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import { useAuth } from "@/contexts/AuthContext";
 import { useHabits } from "@/contexts/HabitsContext";
 import { useGoals } from "@/contexts/GoalsContext";
 import { useUserProfile } from "@/contexts/UserProfileContext";
@@ -12,30 +11,28 @@ import {
   computeTodayProgress,
   type TodayItem,
 } from "@/lib/todayFeed";
-import { updateHabit } from "@/lib/habits";
-import { updateGoal } from "@/lib/goals";
 import { toLocalDateString } from "@/lib/dates";
+import { toErrorMessage } from "@/lib/errors";
 import type { DayPartKey } from "@/types/user";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TodaySectionBlock } from "@/components/today/TodaySectionBlock";
 import { DayPartEditModal } from "@/components/today/DayPartEditModal";
 
 export default function TodayPage() {
-  const { user } = useAuth();
   const {
     habits,
     loading: habitsLoading,
     todayCompletions,
     weekCompletionCounts,
     toggleTodayCompletion,
-    refresh: refreshHabits,
+    reorderHabits,
   } = useHabits();
   const {
     goals,
     loading: goalsLoading,
     toggleToday,
     isLeftover,
-    refresh: refreshGoals,
+    reorderGoals,
   } = useGoals();
   const { profile, profileLoading } = useUserProfile();
 
@@ -93,30 +90,32 @@ export default function TodayPage() {
         await toggleToday(item.goal);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Update failed");
+      toast.error(toErrorMessage(err, "Update failed"));
     }
   };
 
   const onReorder = async (dayPart: DayPartKey, items: TodayItem[]) => {
-    if (!user) return;
     const withOrders = items.map((item, index) => ({ ...item, order: index }));
     setOrderOverride((prev) => ({ ...prev, [dayPart]: withOrders }));
     try {
-      await Promise.all(
-        withOrders.map((item) =>
-          item.kind === "habit"
-            ? updateHabit(user.uid, item.habit.id, { order: item.order })
-            : updateGoal(user.uid, item.goal.id, { order: item.order }),
-        ),
-      );
-      await Promise.all([refreshHabits(), refreshGoals()]);
+      const habitOrders = withOrders
+        .filter((i): i is Extract<TodayItem, { kind: "habit" }> => i.kind === "habit")
+        .map((i) => ({ id: i.habit.id, order: i.order }));
+      const goalOrders = withOrders
+        .filter((i): i is Extract<TodayItem, { kind: "goal" }> => i.kind === "goal")
+        .map((i) => ({ id: i.goal.id, order: i.order }));
+
+      await Promise.all([
+        reorderHabits(habitOrders),
+        reorderGoals(goalOrders),
+      ]);
       setOrderOverride((prev) => {
         const next = { ...prev };
         delete next[dayPart];
         return next;
       });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Reorder failed");
+      toast.error(toErrorMessage(err, "Reorder failed"));
       setOrderOverride((prev) => {
         const next = { ...prev };
         delete next[dayPart];

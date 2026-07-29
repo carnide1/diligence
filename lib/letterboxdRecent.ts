@@ -1,4 +1,5 @@
 const RECENT_KEY = "diligence.letterboxd.recent";
+export const LETTERBOXD_CACHE_PREFIX = "diligence.letterboxd.cache:";
 const MAX_RECENT = 5;
 
 export type RecentLetterboxdUrl = {

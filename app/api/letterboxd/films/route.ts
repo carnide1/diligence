@@ -1,10 +1,50 @@
 import { NextResponse } from "next/server";
 import { fetchLetterboxdList } from "@/lib/letterboxd";
+import { rateLimit } from "@/lib/rateLimit";
+import { readBearerToken, verifyFirebaseIdToken } from "@/lib/verifyIdToken";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const WINDOW_MS = 60_000;
+const MAX_PER_WINDOW = 10;
+
 export async function POST(request: Request) {
+  const token = readBearerToken(request);
+  if (!token) {
+    return NextResponse.json(
+      { error: "Sign in required." },
+      { status: 401 },
+    );
+  }
+
+  const verified = await verifyFirebaseIdToken(token);
+  if (!verified) {
+    return NextResponse.json(
+      { error: "Invalid or expired session." },
+      { status: 401 },
+    );
+  }
+
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "unknown";
+  const limited = rateLimit(
+    `letterboxd:${verified.uid}:${ip}`,
+    MAX_PER_WINDOW,
+    WINDOW_MS,
+  );
+  if (!limited.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again shortly." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(limited.retryAfterSec) },
+      },
+    );
+  }
+
   let body: unknown;
   try {
     body = await request.json();

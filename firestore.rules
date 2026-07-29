@@ -2,24 +2,76 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Deny by default. Authenticated users may only access their own tree.
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isNonEmptyString(value) {
+      return value is string && value.size() > 0 && value.size() <= 200;
+    }
+
+    function isLocalDate(value) {
+      return value is string && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function validDayPart(value) {
+      return value in ['morning', 'afternoon', 'evening', 'night'];
+    }
+
+    // Ownership + light field checks. Streak integrity remains client-trusted.
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isOwner(userId);
 
       match /habits/{habitId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && (!('title' in request.resource.data)
+              || isNonEmptyString(request.resource.data.title))
+          && (!('dayPart' in request.resource.data)
+              || validDayPart(request.resource.data.dayPart))
+          && (!('order' in request.resource.data)
+              || request.resource.data.order is int)
+          && (!('paused' in request.resource.data)
+              || request.resource.data.paused is bool)
+          && (!('currentStreak' in request.resource.data)
+              || (request.resource.data.currentStreak is int
+                  && request.resource.data.currentStreak >= 0))
+          && (!('longestStreak' in request.resource.data)
+              || (request.resource.data.longestStreak is int
+                  && request.resource.data.longestStreak >= 0));
+        allow delete: if isOwner(userId);
       }
 
       match /habitCompletions/{completionId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && request.resource.data.habitId is string
+          && request.resource.data.habitId.size() > 0
+          && isLocalDate(request.resource.data.localDate);
+        allow delete: if isOwner(userId);
       }
 
       match /goals/{goalId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && (!('title' in request.resource.data)
+              || isNonEmptyString(request.resource.data.title))
+          && (!('dayPart' in request.resource.data)
+              || validDayPart(request.resource.data.dayPart))
+          && (!('order' in request.resource.data)
+              || request.resource.data.order is int)
+          && (!('status' in request.resource.data)
+              || request.resource.data.status in ['active', 'completed', 'deleted']);
+        allow delete: if isOwner(userId);
       }
 
       match /goalCompletions/{completionId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && request.resource.data.goalId is string
+          && request.resource.data.goalId.size() > 0
+          && isLocalDate(request.resource.data.localDate);
+        allow delete: if isOwner(userId);
       }
     }
   }

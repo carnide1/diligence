@@ -7,20 +7,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { DAY_PART_KEYS, DAY_PART_LABELS, type DayPartKey } from "@/types/user";
 import type { Habit, HabitInput, HabitSchedule } from "@/types/habit";
 import { DEFAULT_HABIT_ICON } from "@/lib/habitIcons";
+import { WEEKDAY_OPTIONS } from "@/lib/weekdays";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { TextInput } from "@/components/ui/TextInput";
 import { IconPicker } from "@/components/icons/IconPicker";
-
-const WEEKDAY_OPTIONS = [
-  { value: 0, label: "Sun" },
-  { value: 1, label: "Mon" },
-  { value: 2, label: "Tue" },
-  { value: 3, label: "Wed" },
-  { value: 4, label: "Thu" },
-  { value: 5, label: "Fri" },
-  { value: 6, label: "Sat" },
-] as const;
 
 const schema = z.object({
   title: z.string().trim().min(1, "Title is required").max(80),

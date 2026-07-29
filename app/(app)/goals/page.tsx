@@ -1,16 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import toast from "react-hot-toast";
 import { useGoals } from "@/contexts/GoalsContext";
-import { useUserProfile } from "@/contexts/UserProfileContext";
-import { groupByDayPart } from "@/lib/groupByDayPart";
-import { formatPeriodRange } from "@/lib/dayPeriods";
+import { toErrorMessage } from "@/lib/errors";
+import { useDayPartGroups } from "@/hooks/useDayPartGroups";
 import type { Goal, GoalInput } from "@/types/goal";
 import { GoalFormModal } from "@/components/goals/GoalFormModal";
 import { HabitIcon } from "@/components/icons/HabitIcon";
 import { DayPartSection } from "@/components/ui/DayPartSection";
 import { Button } from "@/components/ui/Button";
+import { EntityListShell } from "@/components/layout/EntityListShell";
+import { StatTile } from "@/components/ui/StatTile";
 
 export default function GoalsPage() {
   const {
@@ -24,7 +25,7 @@ export default function GoalsPage() {
     toggleToday,
     isLeftover,
   } = useGoals();
-  const { profile } = useUserProfile();
+  const { groups, rangeByKey, profile } = useDayPartGroups(goals);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Goal | null>(null);
@@ -49,7 +50,7 @@ export default function GoalsPage() {
         toast.success("Goal created");
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Save failed");
+      toast.error(toErrorMessage(err, "Save failed"));
       throw err;
     }
   };
@@ -60,7 +61,7 @@ export default function GoalsPage() {
       await deleteGoal(goal.id);
       toast.success("Goal deleted");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Delete failed");
+      toast.error(toErrorMessage(err, "Delete failed"));
     }
   };
 
@@ -68,76 +69,29 @@ export default function GoalsPage() {
     try {
       await toggleToday(goal);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not update");
+      toast.error(toErrorMessage(err, "Could not update"));
     }
   };
 
-  const groups = useMemo(() => {
-    const labels = Object.fromEntries(
-      (profile?.dayPeriods ?? []).map((p) => [p.key, p.label]),
-    );
-    return groupByDayPart(goals, labels);
-  }, [goals, profile?.dayPeriods]);
-
-  const rangeByKey = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const period of profile?.dayPeriods ?? []) {
-      map.set(period.key, formatPeriodRange(period));
-    }
-    return map;
-  }, [profile?.dayPeriods]);
-
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="font-display text-3xl tracking-tight text-foreground">
-            Goals
-          </h1>
-          <p className="text-sm text-muted">
-            Same-day targets. Leftovers roll until done.
-          </p>
+    <EntityListShell
+      title="Goals"
+      description="Same-day targets. Leftovers roll until done."
+      actionLabel="Add goal"
+      onAction={openCreate}
+      loading={loading}
+      loadingLabel="Loading goals…"
+      error={error}
+      onRetry={() => void refresh()}
+      empty={goals.length === 0}
+      emptyLabel="No active goals. Add one for today."
+      beforeList={
+        <div className="grid grid-cols-2 gap-3">
+          <StatTile label="Current streak" value={profile?.currentStreak ?? 0} />
+          <StatTile label="Longest streak" value={profile?.longestStreak ?? 0} />
         </div>
-        <Button onClick={openCreate}>Add goal</Button>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-3">
-          <p className="text-xs text-faint">Current streak</p>
-          <p className="mt-1 text-2xl font-medium text-foreground">
-            {profile?.currentStreak ?? 0}
-          </p>
-        </div>
-        <div className="rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-3">
-          <p className="text-xs text-faint">Longest streak</p>
-          <p className="mt-1 text-2xl font-medium text-foreground">
-            {profile?.longestStreak ?? 0}
-          </p>
-        </div>
-      </div>
-
-      {loading ? <p className="text-sm text-muted">Loading goals…</p> : null}
-
-      {error ? (
-        <div className="rounded-[var(--radius)] border border-danger/40 bg-danger-soft px-4 py-3 text-sm text-danger">
-          <p>{error}</p>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mt-2"
-            onClick={() => void refresh()}
-          >
-            Retry
-          </Button>
-        </div>
-      ) : null}
-
-      {!loading && !error && goals.length === 0 ? (
-        <div className="rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-8 text-center text-sm text-muted">
-          No active goals. Add one for today.
-        </div>
-      ) : null}
-
+      }
+    >
       <div className="flex flex-col gap-6">
         {groups.map((group) => (
           <DayPartSection
@@ -232,6 +186,6 @@ export default function GoalsPage() {
         onSubmit={onSave}
         initial={editing}
       />
-    </div>
+    </EntityListShell>
   );
 }

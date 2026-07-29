@@ -1,18 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import toast from "react-hot-toast";
 import { Pencil, Pause, Play, Trash2 } from "lucide-react";
 import { useHabits } from "@/contexts/HabitsContext";
-import { useUserProfile } from "@/contexts/UserProfileContext";
 import { describeSchedule } from "@/lib/habitSchedule";
-import { groupByDayPart } from "@/lib/groupByDayPart";
-import { formatPeriodRange } from "@/lib/dayPeriods";
+import { toErrorMessage } from "@/lib/errors";
+import { useDayPartGroups } from "@/hooks/useDayPartGroups";
 import type { Habit, HabitInput } from "@/types/habit";
 import { HabitFormModal } from "@/components/habits/HabitFormModal";
 import { HabitIcon } from "@/components/icons/HabitIcon";
 import { DayPartSection } from "@/components/ui/DayPartSection";
 import { Button } from "@/components/ui/Button";
+import { EntityListShell } from "@/components/layout/EntityListShell";
 
 export default function HabitsPage() {
   const {
@@ -25,8 +25,8 @@ export default function HabitsPage() {
     pauseHabit,
     deleteHabit,
   } = useHabits();
-  const { profile } = useUserProfile();
 
+  const { groups, rangeByKey } = useDayPartGroups(habits);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Habit | null>(null);
 
@@ -50,7 +50,7 @@ export default function HabitsPage() {
         toast.success("Habit created");
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Save failed");
+      toast.error(toErrorMessage(err, "Save failed"));
       throw err;
     }
   };
@@ -60,7 +60,7 @@ export default function HabitsPage() {
       await pauseHabit(habit.id, !habit.paused);
       toast.success(habit.paused ? "Resumed" : "Paused");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Update failed");
+      toast.error(toErrorMessage(err, "Update failed"));
     }
   };
 
@@ -72,61 +72,23 @@ export default function HabitsPage() {
       await deleteHabit(habit.id);
       toast.success("Habit deleted");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Delete failed");
+      toast.error(toErrorMessage(err, "Delete failed"));
     }
   };
 
-  const groups = useMemo(() => {
-    const labels = Object.fromEntries(
-      (profile?.dayPeriods ?? []).map((p) => [p.key, p.label]),
-    );
-    return groupByDayPart(habits, labels);
-  }, [habits, profile?.dayPeriods]);
-
-  const rangeByKey = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const period of profile?.dayPeriods ?? []) {
-      map.set(period.key, formatPeriodRange(period));
-    }
-    return map;
-  }, [profile?.dayPeriods]);
-
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="font-display text-3xl tracking-tight text-foreground">
-            Habits
-          </h1>
-          <p className="text-sm text-muted">
-            Recurring schedules with current and longest streaks.
-          </p>
-        </div>
-        <Button onClick={openCreate}>New</Button>
-      </div>
-
-      {loading ? <p className="text-sm text-muted">Loading habits…</p> : null}
-
-      {error ? (
-        <div className="rounded-[var(--radius)] border border-danger/40 bg-danger-soft px-4 py-3 text-sm text-danger">
-          <p>{error}</p>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mt-2"
-            onClick={() => void refresh()}
-          >
-            Retry
-          </Button>
-        </div>
-      ) : null}
-
-      {!loading && !error && habits.length === 0 ? (
-        <div className="rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-8 text-center text-sm text-muted">
-          No habits yet. Add one to start a streak.
-        </div>
-      ) : null}
-
+    <EntityListShell
+      title="Habits"
+      description="Recurring schedules with current and longest streaks."
+      actionLabel="New"
+      onAction={openCreate}
+      loading={loading}
+      loadingLabel="Loading habits…"
+      error={error}
+      onRetry={() => void refresh()}
+      empty={habits.length === 0}
+      emptyLabel="No habits yet. Add one to start a streak."
+    >
       <div className="flex flex-col gap-6">
         {groups.map((group) => (
           <DayPartSection
@@ -168,28 +130,14 @@ export default function HabitsPage() {
 
                     {habit.description ? (
                       <div className="hidden w-[12rem] shrink-0 md:block md:w-[14rem]">
-                        <p className="mb-1.5 px-3 text-xs font-medium text-muted">
-                          Description
-                        </p>
-                        <div className="rounded-[var(--radius-sm)] bg-bg-overlay/80 px-3 py-2">
-                          <p className="break-words text-xs leading-relaxed text-muted">
-                            {habit.description}
-                          </p>
-                        </div>
+                        <EntityDescription text={habit.description} />
                       </div>
                     ) : null}
                   </div>
 
                   {habit.description ? (
                     <div className="mt-3 md:hidden">
-                      <p className="mb-1.5 px-3 text-xs font-medium text-muted">
-                        Description
-                      </p>
-                      <div className="rounded-[var(--radius-sm)] bg-bg-overlay/80 px-3 py-2">
-                        <p className="break-words text-xs leading-relaxed text-muted">
-                          {habit.description}
-                        </p>
-                      </div>
+                      <EntityDescription text={habit.description} />
                     </div>
                   ) : null}
 
@@ -232,6 +180,17 @@ export default function HabitsPage() {
         onSubmit={onSave}
         initial={editing}
       />
-    </div>
+    </EntityListShell>
+  );
+}
+
+function EntityDescription({ text }: { text: string }) {
+  return (
+    <>
+      <p className="mb-1.5 px-3 text-xs font-medium text-muted">Description</p>
+      <div className="rounded-[var(--radius-sm)] bg-bg-overlay/80 px-3 py-2">
+        <p className="break-words text-xs leading-relaxed text-muted">{text}</p>
+      </div>
+    </>
   );
 }

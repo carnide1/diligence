@@ -112,7 +112,7 @@ export function GoalFormModal({
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-muted">Day part</span>
           <select
-            className="h-10 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-foreground"
+            className="h-10 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-foreground"
             {...register("dayPart")}
           >
             {DAY_PART_KEYS.map((key) => (

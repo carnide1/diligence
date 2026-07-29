@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import toast from "react-hot-toast";
 import { Dices, ExternalLink, Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { TextInput } from "@/components/ui/TextInput";
+import { useAuth } from "@/contexts/AuthContext";
+import { toErrorMessage } from "@/lib/errors";
 import {
   pickRandomFilm,
   type LetterboxdFilm,
 } from "@/lib/letterboxd";
 import {
+  LETTERBOXD_CACHE_PREFIX,
   loadRecentUrls,
   rememberUrl,
   type RecentLetterboxdUrl,
@@ -29,12 +32,10 @@ type LoadedList = {
   films: LetterboxdFilm[];
 };
 
-const CACHE_PREFIX = "diligence.letterboxd.cache:";
-
 function readCache(url: string): LoadedList | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = sessionStorage.getItem(CACHE_PREFIX + url);
+    const raw = sessionStorage.getItem(LETTERBOXD_CACHE_PREFIX + url);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as LoadedList;
     if (!parsed?.films?.length || !parsed.canonicalUrl) return null;
@@ -48,7 +49,7 @@ function writeCache(list: LoadedList) {
   if (typeof window === "undefined") return;
   try {
     sessionStorage.setItem(
-      CACHE_PREFIX + list.canonicalUrl,
+      LETTERBOXD_CACHE_PREFIX + list.canonicalUrl,
       JSON.stringify(list),
     );
   } catch {
@@ -57,15 +58,14 @@ function writeCache(list: LoadedList) {
 }
 
 export default function FilmsPage() {
+  const { user } = useAuth();
   const [url, setUrl] = useState("");
-  const [recent, setRecent] = useState<RecentLetterboxdUrl[]>([]);
+  const [recent, setRecent] = useState<RecentLetterboxdUrl[]>(() =>
+    loadRecentUrls(),
+  );
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState<LoadedList | null>(null);
   const [pick, setPick] = useState<LetterboxdFilm | null>(null);
-
-  useEffect(() => {
-    setRecent(loadRecentUrls());
-  }, []);
 
   const applyList = (
     list: LoadedList,
@@ -97,17 +97,25 @@ export default function FilmsPage() {
 
     setLoading(true);
     try {
-      const cached = readCache(trimmed) ?? readCache(
-        trimmed.endsWith("/") ? trimmed : `${trimmed}/`,
-      );
+      const cached =
+        readCache(trimmed) ??
+        readCache(trimmed.endsWith("/") ? trimmed : `${trimmed}/`);
       if (cached) {
         applyList(cached, pick);
         return;
       }
 
+      if (!user) {
+        throw new Error("Sign in required.");
+      }
+      const idToken = await user.getIdToken();
+
       const res = await fetch("/api/letterboxd/films", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
         body: JSON.stringify({ url: trimmed }),
       });
       const data = (await res.json()) as FilmsResponse;
@@ -123,7 +131,7 @@ export default function FilmsPage() {
       writeCache(list);
       applyList(list, pick);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Load failed");
+      toast.error(toErrorMessage(err, "Load failed"));
     } finally {
       setLoading(false);
     }

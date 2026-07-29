@@ -1,69 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import toast from "react-hot-toast";
 import {
-  adjustPeriodEnd,
-  adjustPeriodStart,
   formatPeriodRange,
-  labelToMinutes,
   minutesToLabel,
-  validateDayPeriods,
 } from "@/lib/dayPeriods";
-import { useUserProfile } from "@/contexts/UserProfileContext";
-import type { DayPartKey, DayPeriod } from "@/types/user";
+import { useDayPeriodsDraft } from "@/hooks/useDayPeriodsDraft";
 import { Button } from "@/components/ui/Button";
 import { TextInput } from "@/components/ui/TextInput";
 
 export function DayPeriodsEditor() {
-  const { profile, saveDayPeriods } = useUserProfile();
-  const [draft, setDraft] = useState<DayPeriod[] | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const periods = draft ?? profile?.dayPeriods ?? [];
-
-  const applyChange = (
-    result: DayPeriod[] | { error: string },
-  ): boolean => {
-    if ("error" in result) {
-      toast.error(result.error);
-      return false;
-    }
-    setDraft(result);
-    return true;
-  };
-
-  const onStartChange = (key: DayPartKey, value: string) => {
-    const minutes = labelToMinutes(value);
-    if (minutes === null) return;
-    applyChange(adjustPeriodStart(periods, key, minutes));
-  };
-
-  const onEndChange = (key: DayPartKey, value: string) => {
-    const minutes = labelToMinutes(value);
-    if (minutes === null) return;
-    applyChange(adjustPeriodEnd(periods, key, minutes));
-  };
-
-  const onSave = async () => {
-    const error = validateDayPeriods(periods);
-    if (error) {
-      toast.error(error);
-      return;
-    }
-    setSaving(true);
-    try {
-      await saveDayPeriods(periods);
-      setDraft(null);
-      toast.success("Day periods saved");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const dirty = draft !== null;
+  const {
+    profile,
+    periods,
+    dirty,
+    saving,
+    onStartChange,
+    onEndChange,
+    reset,
+    save,
+  } = useDayPeriodsDraft();
 
   if (!profile) return null;
 
@@ -109,15 +64,11 @@ export function DayPeriodsEditor() {
       </div>
 
       <div className="flex gap-2">
-        <Button onClick={onSave} disabled={!dirty || saving}>
+        <Button onClick={() => void save()} disabled={!dirty || saving}>
           {saving ? "Saving…" : "Save day periods"}
         </Button>
         {dirty ? (
-          <Button
-            variant="ghost"
-            onClick={() => setDraft(null)}
-            disabled={saving}
-          >
+          <Button variant="ghost" onClick={reset} disabled={saving}>
             Reset
           </Button>
         ) : null}
