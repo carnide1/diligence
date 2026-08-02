@@ -12,10 +12,13 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import {
   ensureUserDoc,
+  updateNotificationPrefs,
   updateUserDayPeriods,
   updateUserDisplayName,
+  updateUserTimezone,
 } from "@/lib/users";
-import type { DayPeriod, UserProfile } from "@/types/user";
+import { defaultTimezone } from "@/lib/nudgeDecide";
+import type { DayPeriod, NotificationPrefs, UserProfile } from "@/types/user";
 
 type UserProfileContextValue = {
   profile: UserProfile | null;
@@ -24,6 +27,7 @@ type UserProfileContextValue = {
   refreshProfile: () => Promise<void>;
   saveDisplayName: (displayName: string) => Promise<void>;
   saveDayPeriods: (dayPeriods: DayPeriod[]) => Promise<void>;
+  saveNotificationPrefs: (prefs: NotificationPrefs) => Promise<void>;
 };
 
 const UserProfileContext = createContext<UserProfileContextValue | null>(null);
@@ -39,6 +43,11 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     setProfileError(null);
     try {
       const next = await ensureUserDoc(uidUser);
+      const tz = defaultTimezone();
+      if (next.timezone === "UTC" && tz !== "UTC") {
+        await updateUserTimezone(uidUser.uid, tz);
+        next.timezone = tz;
+      }
       setProfile(next);
     } catch (error) {
       console.error(error);
@@ -103,6 +112,17 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  const saveNotificationPrefs = useCallback(
+    async (prefs: NotificationPrefs) => {
+      if (!user) throw new Error("You must be signed in.");
+      await updateNotificationPrefs(user.uid, prefs);
+      setProfile((prev) =>
+        prev ? { ...prev, notificationPrefs: prefs } : prev,
+      );
+    },
+    [user],
+  );
+
   const value = useMemo(
     () => ({
       profile,
@@ -111,6 +131,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       refreshProfile,
       saveDisplayName,
       saveDayPeriods,
+      saveNotificationPrefs,
     }),
     [
       profile,
@@ -119,6 +140,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       refreshProfile,
       saveDisplayName,
       saveDayPeriods,
+      saveNotificationPrefs,
     ],
   );
 

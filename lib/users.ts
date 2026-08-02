@@ -8,10 +8,26 @@ import {
 import type { User } from "firebase/auth";
 import { getFirebaseDb } from "@/lib/firebase";
 import { DEFAULT_DAY_PERIODS } from "@/lib/dayPeriods";
-import type { DayPeriod, UserProfile } from "../types/user";
+import { defaultTimezone } from "@/lib/nudgeDecide";
+import type {
+  DayPeriod,
+  NotificationPrefs,
+  UserProfile,
+} from "../types/user";
+import { DEFAULT_NOTIFICATION_PREFS } from "../types/user";
 
 function userRef(uid: string) {
   return doc(getFirebaseDb(), "users", uid);
+}
+
+function normalizePrefs(raw: unknown): NotificationPrefs {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_NOTIFICATION_PREFS };
+  const o = raw as Record<string, unknown>;
+  return {
+    enabled: o.enabled !== false,
+    gymNags: o.gymNags !== false,
+    habitsGoalsNags: o.habitsGoalsNags !== false,
+  };
 }
 
 function normalizeProfile(
@@ -38,6 +54,11 @@ function normalizeProfile(
       typeof data.lastResolvedLocalDate === "string"
         ? data.lastResolvedLocalDate
         : null,
+    timezone:
+      typeof data.timezone === "string" && data.timezone
+        ? data.timezone
+        : "UTC",
+    notificationPrefs: normalizePrefs(data.notificationPrefs),
   };
 }
 
@@ -59,12 +80,33 @@ export async function ensureUserDoc(user: User): Promise<UserProfile> {
       currentStreak: 0,
       longestStreak: 0,
       lastResolvedLocalDate: null,
+      timezone: defaultTimezone(),
+      notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
     };
     await setDoc(ref, payload);
     return normalizeProfile(payload, fallback);
   }
 
-  return normalizeProfile(snap.data() as Record<string, unknown>, fallback);
+  const profile = normalizeProfile(
+    snap.data() as Record<string, unknown>,
+    fallback,
+  );
+
+  // Backfill timezone / prefs for older profiles
+  const data = snap.data() as Record<string, unknown>;
+  const patch: Record<string, unknown> = {};
+  if (!data.timezone) patch.timezone = defaultTimezone();
+  if (!data.notificationPrefs)
+    patch.notificationPrefs = DEFAULT_NOTIFICATION_PREFS;
+  if (Object.keys(patch).length) {
+    await updateDoc(ref, patch);
+    return normalizeProfile(
+      { ...(snap.data() as Record<string, unknown>), ...patch },
+      fallback,
+    );
+  }
+
+  return profile;
 }
 
 export async function updateUserDisplayName(
@@ -94,4 +136,18 @@ export async function updateUserGoalStreaks(
     longestStreak: fields.longestStreak,
     lastResolvedLocalDate: fields.lastResolvedLocalDate,
   });
+}
+
+export async function updateUserTimezone(
+  uid: string,
+  timezone: string,
+): Promise<void> {
+  await updateDoc(userRef(uid), { timezone });
+}
+
+export async function updateNotificationPrefs(
+  uid: string,
+  prefs: NotificationPrefs,
+): Promise<void> {
+  await updateDoc(userRef(uid), { notificationPrefs: prefs });
 }

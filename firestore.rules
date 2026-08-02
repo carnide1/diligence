@@ -15,7 +15,10 @@ service cloud.firestore {
     }
 
     function validDayPart(value) {
-      return value in ['morning', 'afternoon', 'evening', 'night'];
+      return value in [
+        'dawning', 'morning', 'noon', 'afternoon',
+        'dinner', 'evening', 'night'
+      ];
     }
 
     // Ownership + light field checks. Streak integrity remains client-trusted.
@@ -72,6 +75,23 @@ service cloud.firestore {
           && request.resource.data.goalId.size() > 0
           && isLocalDate(request.resource.data.localDate);
         allow delete: if isOwner(userId);
+      }
+
+      match /gymExercises/{id} {
+        allow read, write: if isOwner(userId);
+      }
+      match /gymTemplates/{id} {
+        allow read, write: if isOwner(userId);
+      }
+      match /gymSessions/{id} {
+        allow read, write: if isOwner(userId);
+      }
+      match /gymAbsences/{id} {
+        allow read, write: if isOwner(userId);
+      }
+      match /notificationLog/{id} {
+        allow read: if isOwner(userId);
+        allow write: if false;
       }
     }
   }

@@ -19,6 +19,18 @@ export type DayPeriod = {
   endMinutes: number;
 };
 
+export type NotificationPrefs = {
+  enabled: boolean;
+  gymNags: boolean;
+  habitsGoalsNags: boolean;
+};
+
+export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  enabled: true,
+  gymNags: true,
+  habitsGoalsNags: true,
+};
+
 export type UserProfile = {
   displayName: string;
   email: string;
@@ -27,6 +39,8 @@ export type UserProfile = {
   currentStreak: number;
   longestStreak: number;
   lastResolvedLocalDate: string | null;
+  timezone: string;
+  notificationPrefs: NotificationPrefs;
 };
 
 export const DAY_PART_LABELS: Record<DayPartKey, string> = {

@@ -7,6 +7,7 @@ import { useUserProfile } from "@/contexts/UserProfileContext";
 import { useProfileStats } from "@/hooks/useProfileStats";
 import { DayPeriodsEditor } from "@/components/profile/DayPeriodsEditor";
 import { ProfileNameForm } from "@/components/profile/ProfileNameForm";
+import { NotificationPrefsPanel } from "@/components/profile/NotificationPrefsPanel";
 import { Button } from "@/components/ui/Button";
 import { StatTile } from "@/components/ui/StatTile";
 import { toErrorMessage } from "@/lib/errors";
@@ -118,6 +119,8 @@ export default function ProfilePage() {
           </section>
 
           <DayPeriodsEditor />
+
+          <NotificationPrefsPanel />
         </>
       ) : null}
     </div>
