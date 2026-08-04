@@ -7,6 +7,9 @@ import {
 } from "@/lib/nudgeDecide";
 import { sendNudgeEmail } from "@/lib/sendNudgeEmail";
 import { gymWeekBounds, requiredWorkoutsForWeek } from "@/lib/gymWeek";
+import { weekBounds } from "@/lib/dates";
+import { isWithinActiveRange } from "@/lib/activeRange";
+import { isHabitDueOn, parseHabitSchedule } from "@/lib/habitSchedule";
 import { DEFAULT_NOTIFICATION_PREFS } from "@/types/user";
 import type { NotificationPrefs } from "@/types/user";
 
@@ -74,26 +77,46 @@ async function buildSnapshot(
 
   const db = getAdminDb();
   const userRef = db.collection("users").doc(uid);
+  const habitWeek = weekBounds(localDate);
 
-  const [habitsSnap, goalsSnap, habitCompletionsSnap, goalCompletionsSnap, sessionsSnap, absencesSnap] =
-    await Promise.all([
-      userRef.collection("habits").get(),
-      userRef.collection("goals").get(),
-      userRef
-        .collection("habitCompletions")
-        .where("localDate", "==", localDate)
-        .get(),
-      userRef
-        .collection("goalCompletions")
-        .where("localDate", "==", localDate)
-        .get(),
-      userRef.collection("gymSessions").get(),
-      userRef.collection("gymAbsences").get(),
-    ]);
+  const [
+    habitsSnap,
+    goalsSnap,
+    weekHabitCompletionsSnap,
+    goalCompletionsSnap,
+    sessionsSnap,
+    absencesSnap,
+  ] = await Promise.all([
+    userRef.collection("habits").get(),
+    userRef.collection("goals").get(),
+    userRef
+      .collection("habitCompletions")
+      .where("localDate", ">=", habitWeek.start)
+      .where("localDate", "<=", habitWeek.end)
+      .get(),
+    userRef
+      .collection("goalCompletions")
+      .where("localDate", "==", localDate)
+      .get(),
+    userRef.collection("gymSessions").get(),
+    userRef.collection("gymAbsences").get(),
+  ]);
 
-  const completedHabitIds = new Set(
-    habitCompletionsSnap.docs.map((d) => String(d.data().habitId)),
-  );
+  const weekCompletionCounts = new Map<string, number>();
+  const completedHabitIdsToday = new Set<string>();
+  for (const d of weekHabitCompletionsSnap.docs) {
+    const habitId = String(d.data().habitId || "");
+    const completionDate = String(d.data().localDate || "");
+    if (!habitId) continue;
+    weekCompletionCounts.set(
+      habitId,
+      (weekCompletionCounts.get(habitId) ?? 0) + 1,
+    );
+    if (completionDate === localDate) {
+      completedHabitIdsToday.add(habitId);
+    }
+  }
+
   const completedGoalIds = new Set(
     goalCompletionsSnap.docs.map((d) => String(d.data().goalId)),
   );
@@ -102,24 +125,44 @@ async function buildSnapshot(
   for (const d of habitsSnap.docs) {
     const h = d.data();
     if (h.deletedAt || h.paused) continue;
-    // Simplified: everyDay or includes today weekday; timesPerWeek treated as due if not done
-    const schedule = h.schedule as { type?: string; days?: number[] } | undefined;
-    const dow = new Date(`${localDate}T12:00:00`).getDay();
-    let due = true;
-    if (schedule?.type === "weekdays" && Array.isArray(schedule.days)) {
-      due = schedule.days.includes(dow);
-    }
+    if (completedHabitIdsToday.has(d.id)) continue;
+
+    const due = isHabitDueOn(
+      {
+        schedule: parseHabitSchedule(h.schedule),
+        paused: Boolean(h.paused),
+        activeStartLocalDate:
+          typeof h.activeStartLocalDate === "string"
+            ? h.activeStartLocalDate
+            : null,
+        activeEndLocalDate:
+          typeof h.activeEndLocalDate === "string"
+            ? h.activeEndLocalDate
+            : null,
+      },
+      localDate,
+      weekCompletionCounts.get(d.id) ?? 0,
+    );
     if (!due) continue;
-    if (!completedHabitIds.has(d.id)) {
-      overdueHabitTitles.push(String(h.title || "Habit"));
-    }
+    overdueHabitTitles.push(String(h.title || "Habit"));
   }
 
   const overdueGoalTitles: string[] = [];
   for (const d of goalsSnap.docs) {
     const g = d.data();
     if (g.status === "deleted" || g.status === "completed") continue;
-    if (!completedGoalIds.has(d.id) && g.status !== "completed") {
+    if (
+      !isWithinActiveRange(
+        localDate,
+        typeof g.activeStartLocalDate === "string"
+          ? g.activeStartLocalDate
+          : null,
+        typeof g.activeEndLocalDate === "string" ? g.activeEndLocalDate : null,
+      )
+    ) {
+      continue;
+    }
+    if (!completedGoalIds.has(d.id)) {
       overdueGoalTitles.push(String(g.title || "Goal"));
     }
   }

@@ -11,7 +11,8 @@ import {
 } from "firebase/firestore";
 import { getFirebaseDb } from "./firebase";
 import { DEFAULT_HABIT_ICON } from "./habitIcons";
-import { toLocalDateString } from "./dates";
+import { compareLocalDates, toLocalDateString } from "./dates";
+import { isWithinActiveRange } from "./activeRange";
 import type { DayPartKey } from "../types/user";
 import type {
   Goal,
@@ -64,6 +65,14 @@ function mapGoal(id: string, data: Record<string, unknown>): Goal {
         ? data.createdLocalDate
         : toLocalDateString(),
     status,
+    activeStartLocalDate:
+      typeof data.activeStartLocalDate === "string"
+        ? data.activeStartLocalDate
+        : null,
+    activeEndLocalDate:
+      typeof data.activeEndLocalDate === "string"
+        ? data.activeEndLocalDate
+        : null,
     deletedAt:
       typeof data.deletedAt === "string"
         ? data.deletedAt
@@ -89,12 +98,48 @@ export async function listGoalsForTodayView(uid: string): Promise<Goal[]> {
   );
 
   return all
+    .filter((g) => {
+      if (g.status === "completed" && completedTodayIds.has(g.id)) return true;
+      if (g.status !== "active") return false;
+      return isWithinActiveRange(
+        today,
+        g.activeStartLocalDate,
+        g.activeEndLocalDate,
+      );
+    })
+    .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+}
+
+/**
+ * Soft-delete active goals whose activeEndLocalDate is before today.
+ * Returns number of goals expired.
+ */
+export async function expireGoalsPastEndDate(
+  uid: string,
+  today: string = toLocalDateString(),
+): Promise<number> {
+  const snap = await getDocs(goalsCol(uid));
+  const toExpire = snap.docs
+    .map((d) => mapGoal(d.id, d.data() as Record<string, unknown>))
     .filter(
       (g) =>
-        g.status === "active" ||
-        (g.status === "completed" && completedTodayIds.has(g.id)),
-    )
-    .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+        g.status === "active" &&
+        g.activeEndLocalDate != null &&
+        compareLocalDates(today, g.activeEndLocalDate) > 0,
+    );
+
+  if (toExpire.length === 0) return 0;
+
+  const batch = writeBatch(getFirebaseDb());
+  for (const g of toExpire) {
+    batch.update(goalRef(uid, g.id), {
+      status: "deleted",
+      deletedAt: today,
+      updatedAt: serverTimestamp(),
+    });
+  }
+  await batch.commit();
+  return toExpire.length;
 }
 
 /** All goals (including deleted) for streak reconstruction. */
@@ -124,6 +169,8 @@ export async function createGoal(
     order,
     createdLocalDate: today,
     status: "active" as const,
+    activeStartLocalDate: input.activeStartLocalDate ?? null,
+    activeEndLocalDate: input.activeEndLocalDate ?? null,
     deletedAt: null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -145,6 +192,10 @@ export async function updateGoal(
   if (patch.icon !== undefined) data.icon = patch.icon;
   if (patch.dayPart !== undefined) data.dayPart = patch.dayPart;
   if (patch.order !== undefined) data.order = patch.order;
+  if (patch.activeStartLocalDate !== undefined)
+    data.activeStartLocalDate = patch.activeStartLocalDate;
+  if (patch.activeEndLocalDate !== undefined)
+    data.activeEndLocalDate = patch.activeEndLocalDate;
   if (patch.status !== undefined) data.status = patch.status;
   if (patch.deletedAt !== undefined) data.deletedAt = patch.deletedAt;
   await updateDoc(goalRef(uid, goalId), data);
@@ -211,6 +262,8 @@ export async function buildGoalStreakSnapshots(
     createdLocalDate: g.createdLocalDate,
     status: g.status,
     deletedAt: g.deletedAt,
+    activeStartLocalDate: g.activeStartLocalDate,
+    activeEndLocalDate: g.activeEndLocalDate,
     completionDates: byGoal.get(g.id) ?? [],
   }));
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { TextInput } from "@/components/ui/TextInput";
+import { FORM_SELECT_CLASS } from "@/components/ui/formStyles";
 
 type ExerciseFilterBarProps = {
   query: string;
@@ -8,17 +9,23 @@ type ExerciseFilterBarProps = {
   tag: string;
   onTagChange: (value: string) => void;
   tags: string[];
+  location?: string;
+  onLocationChange?: (value: string) => void;
+  locations?: string[];
   resultCount: number;
   totalCount: number;
 };
 
-/** Shared search + tag filter for Exercises list and Template picker. */
+/** Shared search + tag/location filter for Exercises list and Template picker. */
 export function ExerciseFilterBar({
   query,
   onQueryChange,
   tag,
   onTagChange,
   tags,
+  location = "",
+  onLocationChange,
+  locations = [],
   resultCount,
   totalCount,
 }: ExerciseFilterBarProps) {
@@ -36,7 +43,7 @@ export function ExerciseFilterBar({
           <select
             value={tag}
             onChange={(e) => onTagChange(e.target.value)}
-            className="h-10 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-foreground"
+            className={`${FORM_SELECT_CLASS} bg-bg-elevated`}
           >
             <option value="">All tags</option>
             {tags.map((t) => (
@@ -46,6 +53,23 @@ export function ExerciseFilterBar({
             ))}
           </select>
         </label>
+        {onLocationChange ? (
+          <label className="flex flex-col gap-1.5 text-sm sm:col-span-2">
+            <span className="font-medium text-muted">Location</span>
+            <select
+              value={location}
+              onChange={(e) => onLocationChange(e.target.value)}
+              className={`${FORM_SELECT_CLASS} bg-bg-elevated`}
+            >
+              <option value="">All locations</option>
+              {locations.map((loc) => (
+                <option key={loc} value={loc}>
+                  {loc}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
       <p className="text-xs text-faint">
         Showing {resultCount} of {totalCount}

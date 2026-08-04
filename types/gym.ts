@@ -1,11 +1,28 @@
+export type GymLoadType = "external" | "bodyweight";
+
+export type GymSet = {
+  /** Pounds when loadType is external; ignored for pure bodyweight. */
+  weight: number;
+  reps: number;
+};
+
 export type GymExercise = {
   id: string;
   name: string;
   /** Free-text tags (muscle group, split, etc.). */
   tags: string[];
+  /** Free-text gym / place; progression is per exercise doc. */
+  location: string;
+  /** Default load type when logging this exercise. */
+  loadType: GymLoadType;
+  /** Legacy / display: heaviest set weight from last accept. */
   lastWeight: number | null;
   lastSets: number | null;
   lastReps: number | null;
+  /** Σ(weight × reps) from last accepted external session. */
+  lastVolume: number | null;
+  /** Full set list from last accept (for autofill). */
+  lastSetPerformance: GymSet[] | null;
   lastUsedLocalDate: string | null;
   timesUsed: number;
   archived: boolean;
@@ -16,6 +33,8 @@ export type GymExercise = {
 export type GymExerciseInput = {
   name: string;
   tags: string[];
+  location: string;
+  loadType?: GymLoadType;
 };
 
 export type GymTemplate = {
@@ -39,9 +58,8 @@ export type GymTemplateInput = {
 
 export type GymLiftEntry = {
   exerciseId: string;
-  weight: number;
-  sets: number;
-  reps: number;
+  loadType: GymLoadType;
+  sets: GymSet[];
 };
 
 export type GymCardioBlock = {
@@ -113,3 +131,14 @@ export type GymMotivation = {
 export const WEEKLY_WORKOUT_TARGET = 5;
 export const WARMUP_MINUTES_MIN = 5;
 export const CARDIO_MINUTES_MIN = 20;
+
+/** Volume in lb·reps for progressive gate (bodyweight → 0). */
+export function liftVolume(lift: Pick<GymLiftEntry, "loadType" | "sets">): number {
+  if (lift.loadType === "bodyweight") return 0;
+  return lift.sets.reduce((sum, s) => sum + s.weight * s.reps, 0);
+}
+
+export function heaviestSetWeight(sets: GymSet[]): number | null {
+  if (!sets.length) return null;
+  return sets.reduce((max, s) => Math.max(max, s.weight), 0);
+}

@@ -92,7 +92,7 @@ Never commit this file or key.
 CRON_SECRET=your-long-random-string
 ```
 
-3. Vercel Cron (`vercel.json` runs hourly at minute 0) will call `/api/cron/nudge`. When `CRON_SECRET` is set, Vercel sends `Authorization: Bearer <CRON_SECRET>`.
+3. Vercel Cron (`vercel.json` runs daily at 12:00 UTC) will call `/api/cron/nudge`. When `CRON_SECRET` is set, Vercel sends `Authorization: Bearer <CRON_SECRET>`.
 
 ### 4. Deploy rules + app
 

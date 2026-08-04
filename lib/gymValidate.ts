@@ -2,19 +2,21 @@ import type {
   GymCardioBlock,
   GymExercise,
   GymLiftEntry,
+  GymSet,
 } from "@/types/gym";
 import {
   CARDIO_MINUTES_MIN,
   WARMUP_MINUTES_MIN,
   WEEKLY_WORKOUT_TARGET,
+  liftVolume,
 } from "@/types/gym";
 
 export type ValidateSessionInput = {
   exercises: GymLiftEntry[];
   warmup: GymCardioBlock;
   cardio: GymCardioBlock;
-  /** Map of exerciseId → last accepted weight (null/undefined = first use). */
-  lastWeightByExerciseId: Record<string, number | null | undefined>;
+  /** Map of exerciseId → last accepted volume (null/undefined = first use). */
+  lastVolumeByExerciseId: Record<string, number | null | undefined>;
 };
 
 export type ValidateSessionResult =
@@ -23,6 +25,29 @@ export type ValidateSessionResult =
 
 function isValidNumber(n: unknown): n is number {
   return typeof n === "number" && Number.isFinite(n);
+}
+
+function validateSets(
+  sets: GymSet[],
+  loadType: GymLiftEntry["loadType"],
+  reasons: string[],
+): void {
+  if (!sets.length) {
+    reasons.push("Every lift needs at least one set.");
+    return;
+  }
+  for (const set of sets) {
+    if (!isValidNumber(set.reps) || set.reps <= 0) {
+      reasons.push("Every set needs reps greater than zero.");
+      return;
+    }
+    if (loadType === "external") {
+      if (!isValidNumber(set.weight) || set.weight < 0) {
+        reasons.push("Every set needs a non-negative weight in lb.");
+        return;
+      }
+    }
+  }
 }
 
 export function validateSessionShape(args: {
@@ -50,18 +75,12 @@ export function validateSessionShape(args: {
       reasons.push("Every lift needs an exercise.");
       break;
     }
-    if (!isValidNumber(lift.weight) || lift.weight < 0) {
-      reasons.push("Every lift needs a non-negative weight.");
+    if (lift.loadType !== "external" && lift.loadType !== "bodyweight") {
+      reasons.push("Every lift needs a load type (lb or bodyweight).");
       break;
     }
-    if (!isValidNumber(lift.sets) || lift.sets <= 0) {
-      reasons.push("Every lift needs sets greater than zero.");
-      break;
-    }
-    if (!isValidNumber(lift.reps) || lift.reps <= 0) {
-      reasons.push("Every lift needs reps greater than zero.");
-      break;
-    }
+    validateSets(lift.sets, lift.loadType, reasons);
+    if (reasons.length) break;
   }
 
   if (!isValidNumber(warmup.minutes) || warmup.minutes < WARMUP_MINUTES_MIN) {
@@ -86,7 +105,7 @@ export function validateSessionShape(args: {
   return reasons.length ? { ok: false, reasons } : { ok: true };
 }
 
-/** Hard gate for completing a session — shape + weight-only progressive rule. */
+/** Hard gate — shape + volume progressive rule (external lifts only). */
 export function validateSession(
   input: ValidateSessionInput,
 ): ValidateSessionResult {
@@ -94,11 +113,13 @@ export function validateSession(
   const reasons = shape.ok ? [] : [...shape.reasons];
 
   for (const lift of input.exercises) {
-    const last = input.lastWeightByExerciseId[lift.exerciseId];
+    if (lift.loadType === "bodyweight") continue;
+    const last = input.lastVolumeByExerciseId[lift.exerciseId];
     if (last == null) continue; // first use
-    if (lift.weight < last) {
+    const volume = liftVolume(lift);
+    if (volume < last) {
       reasons.push(
-        `Weight regression on exercise ${lift.exerciseId}: ${lift.weight} < last ${last}.`,
+        `Volume regression on exercise ${lift.exerciseId}: ${volume} < last ${last} (lb×reps).`,
       );
     }
   }
@@ -124,6 +145,28 @@ export function validateSessionWithNames(
   };
 }
 
+export function buildLastVolumeMap(
+  exercises: Pick<GymExercise, "id" | "lastVolume" | "lastWeight" | "lastSets" | "lastReps">[],
+): Record<string, number | null> {
+  const map: Record<string, number | null> = {};
+  for (const e of exercises) {
+    if (e.lastVolume != null) {
+      map[e.id] = e.lastVolume;
+    } else if (
+      e.lastWeight != null &&
+      e.lastSets != null &&
+      e.lastReps != null
+    ) {
+      // Legacy docs without lastVolume
+      map[e.id] = e.lastWeight * e.lastSets * e.lastReps;
+    } else {
+      map[e.id] = null;
+    }
+  }
+  return map;
+}
+
+/** @deprecated Prefer buildLastVolumeMap — kept for any leftover imports. */
 export function buildLastWeightMap(
   exercises: Pick<GymExercise, "id" | "lastWeight">[],
 ): Record<string, number | null> {
@@ -134,16 +177,20 @@ export function buildLastWeightMap(
   return map;
 }
 
-/** Filter exercises by name search and optional tag (case-insensitive). */
-export function filterExercises<T extends { name: string; tags: string[] }>(
+/** Filter exercises by name search and optional tag/location (case-insensitive). */
+export function filterExercises<
+  T extends { name: string; tags: string[]; location?: string },
+>(
   exercises: T[],
-  opts: { query?: string; tag?: string },
+  opts: { query?: string; tag?: string; location?: string },
 ): T[] {
   const q = opts.query?.trim().toLowerCase() ?? "";
   const tag = opts.tag?.trim().toLowerCase() ?? "";
+  const location = opts.location?.trim().toLowerCase() ?? "";
   return exercises.filter((e) => {
     if (q && !e.name.toLowerCase().includes(q)) return false;
     if (tag && !e.tags.some((t) => t.toLowerCase() === tag)) return false;
+    if (location && (e.location ?? "").toLowerCase() !== location) return false;
     return true;
   });
 }
@@ -157,6 +204,17 @@ export function collectUniqueTags(
       const trimmed = t.trim();
       if (trimmed) set.add(trimmed);
     }
+  }
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+export function collectUniqueLocations(
+  exercises: { location?: string }[],
+): string[] {
+  const set = new Set<string>();
+  for (const e of exercises) {
+    const trimmed = e.location?.trim();
+    if (trimmed) set.add(trimmed);
   }
   return [...set].sort((a, b) => a.localeCompare(b));
 }

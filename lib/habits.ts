@@ -16,7 +16,7 @@ import { DEFAULT_HABIT_ICON } from "./habitIcons";
 import { toLocalDateString, yesterdayLocalDate } from "./dates";
 import type { Habit, HabitCompletion, HabitInput } from "../types/habit";
 import type { DayPartKey } from "../types/user";
-import type { HabitSchedule } from "../types/habit";
+import { parseHabitSchedule } from "./habitSchedule";
 
 function habitsCol(uid: string) {
   return collection(getFirebaseDb(), "users", uid, "habits");
@@ -38,21 +38,6 @@ function completionRef(uid: string, habitId: string, localDate: string) {
     "habitCompletions",
     `${habitId}_${localDate}`,
   );
-}
-
-function parseSchedule(raw: unknown): HabitSchedule {
-  if (!raw || typeof raw !== "object") return { type: "everyDay" };
-  const s = raw as Record<string, unknown>;
-  if (s.type === "weekdays" && Array.isArray(s.days)) {
-    return {
-      type: "weekdays",
-      days: s.days.filter((d): d is number => typeof d === "number"),
-    };
-  }
-  if (s.type === "timesPerWeek" && typeof s.n === "number") {
-    return { type: "timesPerWeek", n: s.n };
-  }
-  return { type: "everyDay" };
 }
 
 function mapHabit(id: string, data: Record<string, unknown>): Habit {
@@ -93,7 +78,7 @@ function mapHabit(id: string, data: Record<string, unknown>): Habit {
     dayPart: (typeof data.dayPart === "string"
       ? data.dayPart
       : "morning") as DayPartKey,
-    schedule: parseSchedule(data.schedule),
+    schedule: parseHabitSchedule(data.schedule),
     order: typeof data.order === "number" ? data.order : 0,
     paused: Boolean(data.paused),
     currentStreak:
@@ -105,6 +90,14 @@ function mapHabit(id: string, data: Record<string, unknown>): Habit {
         ? data.lastResolvedLocalDate
         : null,
     createdLocalDate,
+    activeStartLocalDate:
+      typeof data.activeStartLocalDate === "string"
+        ? data.activeStartLocalDate
+        : null,
+    activeEndLocalDate:
+      typeof data.activeEndLocalDate === "string"
+        ? data.activeEndLocalDate
+        : null,
     deletedAt,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
@@ -147,6 +140,8 @@ export async function createHabit(
     // Caught up through yesterday so today's miss is resolved tomorrow.
     lastResolvedLocalDate: yesterday,
     createdLocalDate: today,
+    activeStartLocalDate: input.activeStartLocalDate ?? null,
+    activeEndLocalDate: input.activeEndLocalDate ?? null,
     deletedAt: null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -178,6 +173,10 @@ export async function updateHabit(
   if (patch.schedule !== undefined) data.schedule = patch.schedule;
   if (patch.paused !== undefined) data.paused = patch.paused;
   if (patch.order !== undefined) data.order = patch.order;
+  if (patch.activeStartLocalDate !== undefined)
+    data.activeStartLocalDate = patch.activeStartLocalDate;
+  if (patch.activeEndLocalDate !== undefined)
+    data.activeEndLocalDate = patch.activeEndLocalDate;
   if (patch.currentStreak !== undefined)
     data.currentStreak = patch.currentStreak;
   if (patch.longestStreak !== undefined)

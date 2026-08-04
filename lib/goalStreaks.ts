@@ -6,6 +6,7 @@ import {
   toLocalDateString,
   yesterdayLocalDate,
 } from "./dates";
+import { isWithinActiveRange } from "./activeRange";
 
 export type GoalStreakFields = {
   currentStreak: number;
@@ -22,6 +23,7 @@ function bumpLongest(fields: GoalStreakFields): GoalStreakFields {
 /**
  * Goals that were still open obligations on localDate (including leftovers).
  * Already finished on an earlier day do not count.
+ * Outside active date range do not count.
  */
 export function goalsDueOnDay(
   goals: GoalStreakSnapshot[],
@@ -30,6 +32,15 @@ export function goalsDueOnDay(
   return goals.filter((goal) => {
     if (compareLocalDates(goal.createdLocalDate, localDate) > 0) return false;
     if (goal.deletedAt && compareLocalDates(goal.deletedAt, localDate) <= 0) {
+      return false;
+    }
+    if (
+      !isWithinActiveRange(
+        localDate,
+        goal.activeStartLocalDate,
+        goal.activeEndLocalDate,
+      )
+    ) {
       return false;
     }
 
@@ -115,9 +126,21 @@ export function catchUpGoalStreaks(
   };
 }
 
+/**
+ * True when the goal has been an open obligation on a prior local day.
+ * Uses the later of createdLocalDate and activeStartLocalDate as the
+ * effective first-due day so limited-range goals are not "leftover" before
+ * their window opens.
+ */
 export function isLeftoverGoal(
   createdLocalDate: string,
   today: string = toLocalDateString(),
+  activeStartLocalDate: string | null = null,
 ): boolean {
-  return compareLocalDates(createdLocalDate, today) < 0;
+  const effectiveStart =
+    activeStartLocalDate &&
+    compareLocalDates(activeStartLocalDate, createdLocalDate) > 0
+      ? activeStartLocalDate
+      : createdLocalDate;
+  return compareLocalDates(effectiveStart, today) < 0;
 }

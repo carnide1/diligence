@@ -16,6 +16,7 @@ import {
   buildGoalStreakSnapshots,
   completeGoalToday,
   createGoal,
+  expireGoalsPastEndDate,
   listGoalsForTodayView,
   softDeleteGoal,
   undoGoalCompletionToday,
@@ -68,6 +69,7 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const today = toLocalDateString();
+      await expireGoalsPastEndDate(user.uid, today);
       const currentProfile = profileRef.current;
 
       if (currentProfile) {
@@ -164,7 +166,11 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
   );
 
   const isLeftover = useCallback((goal: Goal) => {
-    return isLeftoverGoal(goal.createdLocalDate);
+    return isLeftoverGoal(
+      goal.createdLocalDate,
+      toLocalDateString(),
+      goal.activeStartLocalDate,
+    );
   }, []);
 
   const reorderGoals = useCallback(

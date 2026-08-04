@@ -18,7 +18,8 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(
           ref={ref}
           id={inputId}
           className={[
-            "h-10 rounded-[var(--radius-sm)] border bg-bg-elevated px-3 text-foreground placeholder:text-faint",
+            // text-base (16px) avoids iOS Safari zoom-on-focus
+            "h-10 rounded-[var(--radius-sm)] border bg-bg-elevated px-3 text-base text-foreground placeholder:text-faint",
             error ? "border-danger" : "border-border focus:border-accent",
             className,
           ].join(" ")}

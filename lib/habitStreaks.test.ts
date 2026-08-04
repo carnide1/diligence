@@ -17,12 +17,16 @@ function base(
   | "currentStreak"
   | "longestStreak"
   | "lastResolvedLocalDate"
+  | "activeStartLocalDate"
+  | "activeEndLocalDate"
 > {
   return {
     paused: false,
     currentStreak: 3,
     longestStreak: 5,
     lastResolvedLocalDate: "2026-07-10",
+    activeStartLocalDate: null,
+    activeEndLocalDate: null,
     ...overrides,
   };
 }
@@ -37,6 +41,16 @@ describe("habitSchedule", () => {
   it("pause means not due", () => {
     const habit = base({ schedule: { type: "everyDay" }, paused: true });
     assert.equal(isHabitDueOn(habit, "2026-07-14", 0), false);
+  });
+
+  it("outside active date range means not due", () => {
+    const habit = base({
+      schedule: { type: "everyDay" },
+      activeStartLocalDate: "2026-07-01",
+      activeEndLocalDate: "2026-07-07",
+    });
+    assert.equal(isHabitDueOn(habit, "2026-07-14", 0), false);
+    assert.equal(isHabitDueOn(habit, "2026-07-05", 0), true);
   });
 });
 
@@ -90,6 +104,41 @@ describe("habitStreaks", () => {
     );
     assert.equal(next.currentStreak, 3);
     assert.equal(next.longestStreak, 4);
+  });
+
+  it("N× week resolves on last active day when range ends mid-week", () => {
+    // Week Sun 2026-07-12 … Sat 2026-07-18; active through Wed 07-15.
+    const habit = base({
+      schedule: { type: "timesPerWeek", n: 2 },
+      currentStreak: 1,
+      longestStreak: 1,
+      activeStartLocalDate: "2026-07-12",
+      activeEndLocalDate: "2026-07-15",
+    });
+    const completed = new Set(["2026-07-13", "2026-07-14"]);
+    const beforeLast = resolveHabitStreakOnDayBoundary(
+      habit,
+      "2026-07-14",
+      completed,
+    );
+    assert.equal(beforeLast.currentStreak, 1);
+    const onLastActive = resolveHabitStreakOnDayBoundary(
+      habit,
+      "2026-07-15",
+      completed,
+    );
+    assert.equal(onLastActive.currentStreak, 2);
+    const saturday = resolveHabitStreakOnDayBoundary(
+      {
+        ...habit,
+        currentStreak: onLastActive.currentStreak,
+        longestStreak: onLastActive.longestStreak,
+      },
+      "2026-07-18",
+      completed,
+    );
+    // Outside active window → freeze (keep credited streak).
+    assert.equal(saturday.currentStreak, 2);
   });
 
   it("pause freezes streak across catch-up", () => {

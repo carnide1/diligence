@@ -17,6 +17,7 @@ import {
   weekBounds,
 } from "./dates";
 import { isHabitDueOn, isScheduledOn } from "./habitSchedule";
+import { isWithinActiveRange } from "./activeRange";
 import { goalsDueOnDay } from "./goalStreaks";
 import type { GoalStreakSnapshot } from "../types/goal";
 
@@ -153,6 +154,17 @@ function habitVisibleOnDay(args: {
     return false;
   }
 
+  // Outside active window — do not invent misses (completions still shown above).
+  if (
+    !isWithinActiveRange(
+      localDate,
+      habit.activeStartLocalDate,
+      habit.activeEndLocalDate,
+    )
+  ) {
+    return false;
+  }
+
   // Pause only affects today and future — keep calendar history intact.
   if (habit.paused && (isFuture || isToday)) {
     return false;
@@ -202,6 +214,8 @@ export function buildCalendarDays(args: {
     createdLocalDate: g.createdLocalDate,
     status: g.status,
     deletedAt: g.deletedAt,
+    activeStartLocalDate: g.activeStartLocalDate,
+    activeEndLocalDate: g.activeEndLocalDate,
     completionDates: args.goalCompletions
       .filter((c) => c.goalId === g.id)
       .map((c) => c.localDate),

@@ -10,15 +10,40 @@ import { DEFAULT_HABIT_ICON } from "@/lib/habitIcons";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { TextInput } from "@/components/ui/TextInput";
+import { FORM_SELECT_CLASS } from "@/components/ui/formStyles";
 import { IconPicker } from "@/components/icons/IconPicker";
 
-const schema = z.object({
-  title: z.string().trim().min(1, "Title is required").max(80),
-  description: z.string().max(280).optional(),
-  dayPart: z.custom<DayPartKey>((v) =>
-    typeof v === "string" && (DAY_PART_KEYS as readonly string[]).includes(v),
-  ),
-});
+const schema = z
+  .object({
+    title: z.string().trim().min(1, "Title is required").max(80),
+    description: z.string().max(280).optional(),
+    dayPart: z.custom<DayPartKey>((v) =>
+      typeof v === "string" && (DAY_PART_KEYS as readonly string[]).includes(v),
+    ),
+    limitedDates: z.boolean(),
+    activeStartLocalDate: z.string().optional(),
+    activeEndLocalDate: z.string().optional(),
+  })
+  .superRefine((values, ctx) => {
+    if (!values.limitedDates) return;
+    const start = values.activeStartLocalDate?.trim() || "";
+    const end = values.activeEndLocalDate?.trim() || "";
+    if (!start && !end) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Pick a start date, end date, or both",
+        path: ["activeStartLocalDate"],
+      });
+      return;
+    }
+    if (start && end && start > end) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Start must be on or before end",
+        path: ["activeEndLocalDate"],
+      });
+    }
+  });
 
 type FormValues = z.infer<typeof schema>;
 
@@ -43,6 +68,11 @@ export function GoalFormModal({
       title: initial?.title ?? "",
       description: initial?.description ?? "",
       dayPart: initial?.dayPart ?? "morning",
+      limitedDates: Boolean(
+        initial?.activeStartLocalDate || initial?.activeEndLocalDate,
+      ),
+      activeStartLocalDate: initial?.activeStartLocalDate ?? "",
+      activeEndLocalDate: initial?.activeEndLocalDate ?? "",
     }),
     [initial],
   );
@@ -51,11 +81,14 @@ export function GoalFormModal({
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: defaults,
   });
+
+  const limitedDates = watch("limitedDates");
 
   useEffect(() => {
     if (!open) return;
@@ -74,6 +107,12 @@ export function GoalFormModal({
         description: values.description ?? "",
         icon,
         dayPart: values.dayPart,
+        activeStartLocalDate: values.limitedDates
+          ? values.activeStartLocalDate?.trim() || null
+          : null,
+        activeEndLocalDate: values.limitedDates
+          ? values.activeEndLocalDate?.trim() || null
+          : null,
       });
       onClose();
     } finally {
@@ -111,10 +150,7 @@ export function GoalFormModal({
         <IconPicker value={icon} onChange={setIcon} />
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-muted">Day part</span>
-          <select
-            className="h-10 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-foreground"
-            {...register("dayPart")}
-          >
+          <select className={FORM_SELECT_CLASS} {...register("dayPart")}>
             {DAY_PART_KEYS.map((key) => (
               <option key={key} value={key}>
                 {DAY_PART_LABELS[key]}
@@ -122,8 +158,32 @@ export function GoalFormModal({
             ))}
           </select>
         </label>
+
+        <label className="flex items-center gap-2 text-sm text-muted">
+          <input type="checkbox" {...register("limitedDates")} />
+          Limited date range
+        </label>
+
+        {limitedDates ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextInput
+              label="Start date"
+              type="date"
+              error={errors.activeStartLocalDate?.message}
+              {...register("activeStartLocalDate")}
+            />
+            <TextInput
+              label="End date"
+              type="date"
+              error={errors.activeEndLocalDate?.message}
+              {...register("activeEndLocalDate")}
+            />
+          </div>
+        ) : null}
+
         <p className="text-xs text-faint">
           Goals are for today only. Unfinished ones roll over automatically.
+          Past the end date they are removed.
         </p>
       </form>
     </Modal>

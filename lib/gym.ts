@@ -15,7 +15,7 @@ import { getFirebaseDb } from "@/lib/firebase";
 import { toLocalDateString } from "@/lib/dates";
 import { gymWeekId } from "@/lib/gymWeek";
 import {
-  buildLastWeightMap,
+  buildLastVolumeMap,
   validateSessionWithNames,
 } from "@/lib/gymValidate";
 import { catchUpGymStreaks } from "@/lib/gymStreak";
@@ -26,13 +26,16 @@ import type {
   GymExercise,
   GymExerciseInput,
   GymLiftEntry,
+  GymLoadType,
   GymSession,
   GymSessionCompleteInput,
   GymSessionPlanInput,
+  GymSet,
   GymStats,
   GymTemplate,
   GymTemplateInput,
 } from "@/types/gym";
+import { heaviestSetWeight, liftVolume } from "@/types/gym";
 
 function exercisesCol(uid: string) {
   return collection(getFirebaseDb(), "users", uid, "gymExercises");
@@ -50,16 +53,33 @@ function userRef(uid: string) {
   return doc(getFirebaseDb(), "users", uid);
 }
 
+function mapSets(raw: unknown): GymSet[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const sets: GymSet[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") return null;
+    const o = item as Record<string, unknown>;
+    if (typeof o.weight !== "number" || typeof o.reps !== "number") return null;
+    sets.push({ weight: o.weight, reps: o.reps });
+  }
+  return sets;
+}
+
 function mapExercise(id: string, data: Record<string, unknown>): GymExercise {
+  const lastSetPerformance = mapSets(data.lastSetPerformance);
   return {
     id,
     name: typeof data.name === "string" ? data.name : "",
     tags: Array.isArray(data.tags)
       ? data.tags.filter((t): t is string => typeof t === "string")
       : [],
+    location: typeof data.location === "string" ? data.location : "",
+    loadType: data.loadType === "bodyweight" ? "bodyweight" : "external",
     lastWeight: typeof data.lastWeight === "number" ? data.lastWeight : null,
     lastSets: typeof data.lastSets === "number" ? data.lastSets : null,
     lastReps: typeof data.lastReps === "number" ? data.lastReps : null,
+    lastVolume: typeof data.lastVolume === "number" ? data.lastVolume : null,
+    lastSetPerformance,
     lastUsedLocalDate:
       typeof data.lastUsedLocalDate === "string"
         ? data.lastUsedLocalDate
@@ -99,10 +119,28 @@ function mapLift(raw: unknown): GymLiftEntry | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   if (typeof o.exerciseId !== "string") return null;
+  const loadType: GymLoadType =
+    o.loadType === "bodyweight" ? "bodyweight" : "external";
+
+  const nested = mapSets(o.sets);
+  if (nested) {
+    return { exerciseId: o.exerciseId, loadType, sets: nested };
+  }
+
+  // Legacy shape: { weight, sets: count, reps }
   if (typeof o.weight !== "number" || typeof o.reps !== "number") return null;
-  const sets =
-    typeof o.sets === "number" && Number.isFinite(o.sets) ? o.sets : 1;
-  return { exerciseId: o.exerciseId, weight: o.weight, sets, reps: o.reps };
+  const count =
+    typeof o.sets === "number" && Number.isFinite(o.sets) && o.sets > 0
+      ? Math.floor(o.sets)
+      : 1;
+  return {
+    exerciseId: o.exerciseId,
+    loadType,
+    sets: Array.from({ length: count }, () => ({
+      weight: o.weight as number,
+      reps: o.reps as number,
+    })),
+  };
 }
 
 function mapCardio(raw: unknown): GymCardioBlock | null {
@@ -201,9 +239,13 @@ export async function createExercise(
   const payload = {
     name: input.name.trim(),
     tags: input.tags.map((t) => t.trim()).filter(Boolean),
+    location: input.location.trim(),
+    loadType: input.loadType === "bodyweight" ? "bodyweight" : "external",
     lastWeight: null,
     lastSets: null,
     lastReps: null,
+    lastVolume: null,
+    lastSetPerformance: null,
     lastUsedLocalDate: null,
     timesUsed: 0,
     archived: false,
@@ -218,12 +260,30 @@ export async function updateExercise(
   uid: string,
   id: string,
   input: GymExerciseInput,
+  opts?: { previousLocation?: string },
 ): Promise<void> {
-  await updateDoc(doc(exercisesCol(uid), id), {
+  const location = input.location.trim();
+  const locationChanged =
+    opts?.previousLocation !== undefined &&
+    opts.previousLocation.trim() !== location;
+
+  const patch: Record<string, unknown> = {
     name: input.name.trim(),
     tags: input.tags.map((t) => t.trim()).filter(Boolean),
+    location,
+    loadType: input.loadType === "bodyweight" ? "bodyweight" : "external",
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  if (locationChanged) {
+    patch.lastWeight = null;
+    patch.lastSets = null;
+    patch.lastReps = null;
+    patch.lastVolume = null;
+    patch.lastSetPerformance = null;
+  }
+
+  await updateDoc(doc(exercisesCol(uid), id), patch);
 }
 
 export async function archiveExercise(uid: string, id: string): Promise<void> {
@@ -361,14 +421,14 @@ export async function completeDailySession(
 
   const exercises = await listExercises(uid, { includeArchived: true });
   const byId = Object.fromEntries(exercises.map((e) => [e.id, e]));
-  const lastWeightByExerciseId = buildLastWeightMap(exercises);
+  const lastVolumeByExerciseId = buildLastVolumeMap(exercises);
 
   const validation = validateSessionWithNames(
     {
       exercises: input.exercises,
       warmup: input.warmup,
       cardio: input.cardio,
-      lastWeightByExerciseId,
+      lastVolumeByExerciseId,
     },
     byId,
   );
@@ -405,10 +465,32 @@ export async function completeDailySession(
   for (const lift of input.exercises) {
     const ex = byId[lift.exerciseId];
     if (!ex) continue;
-    batch.update(doc(exercisesCol(uid), lift.exerciseId), {
-      lastWeight: lift.weight,
-      lastSets: lift.sets,
-      lastReps: lift.reps,
+    const refEx = doc(exercisesCol(uid), lift.exerciseId);
+
+    if (lift.loadType === "bodyweight") {
+      // Preserve external progression baseline; only refresh usage + BW autofill.
+      batch.update(refEx, {
+        loadType: "bodyweight",
+        lastSetPerformance: lift.sets,
+        lastUsedLocalDate: current.localDate,
+        timesUsed: (ex.timesUsed ?? 0) + 1,
+        updatedAt: serverTimestamp(),
+      });
+      continue;
+    }
+
+    const volume = liftVolume(lift);
+    const top = lift.sets.reduce(
+      (best, s) => (s.weight >= best.weight ? s : best),
+      lift.sets[0]!,
+    );
+    batch.update(refEx, {
+      loadType: "external",
+      lastWeight: heaviestSetWeight(lift.sets),
+      lastSets: lift.sets.length,
+      lastReps: top?.reps ?? null,
+      lastVolume: volume,
+      lastSetPerformance: lift.sets,
       lastUsedLocalDate: current.localDate,
       timesUsed: (ex.timesUsed ?? 0) + 1,
       updatedAt: serverTimestamp(),

@@ -20,6 +20,9 @@ export type Habit = {
   lastResolvedLocalDate: string | null;
   /** YYYY-MM-DD; first local day this habit exists (calendar / rate gate). */
   createdLocalDate: string;
+  /** Inclusive active window; null = open-ended. */
+  activeStartLocalDate: string | null;
+  activeEndLocalDate: string | null;
   deletedAt: string | null;
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -40,4 +43,6 @@ export type HabitInput = {
   schedule: HabitSchedule;
   order?: number;
   paused?: boolean;
+  activeStartLocalDate?: string | null;
+  activeEndLocalDate?: string | null;
 };

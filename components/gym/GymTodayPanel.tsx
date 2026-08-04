@@ -9,17 +9,22 @@ import {
   CARDIO_MINUTES_MIN,
   WARMUP_MINUTES_MIN,
   WEEKLY_WORKOUT_TARGET,
+  type GymExercise,
   type GymLiftEntry,
+  type GymLoadType,
   type GymSession,
+  type GymSet,
 } from "@/types/gym";
 import { Button } from "@/components/ui/Button";
 import { TextInput } from "@/components/ui/TextInput";
+import { FORM_SELECT_CLASS } from "@/components/ui/formStyles";
+
+type SetDraft = { weight: string; reps: string };
 
 type LiftDraft = {
   exerciseId: string;
-  weight: string;
-  sets: string;
-  reps: string;
+  loadType: GymLoadType;
+  sets: SetDraft[];
 };
 
 type CardioDraft = {
@@ -28,8 +33,40 @@ type CardioDraft = {
   machine: string;
 };
 
+function emptySet(): SetDraft {
+  return { weight: "", reps: "" };
+}
+
 function emptyLift(): LiftDraft {
-  return { exerciseId: "", weight: "", sets: "", reps: "" };
+  return { exerciseId: "", loadType: "external", sets: [emptySet()] };
+}
+
+function setsFromExercise(ex: GymExercise | undefined): SetDraft[] {
+  if (ex?.lastSetPerformance?.length) {
+    return ex.lastSetPerformance.map((s) => ({
+      weight: String(s.weight),
+      reps: String(s.reps),
+    }));
+  }
+  if (ex?.lastWeight != null && ex.lastReps != null) {
+    const count = ex.lastSets && ex.lastSets > 0 ? ex.lastSets : 1;
+    return Array.from({ length: count }, () => ({
+      weight: String(ex.lastWeight),
+      reps: String(ex.lastReps),
+    }));
+  }
+  return [emptySet()];
+}
+
+function liftToDraft(l: GymLiftEntry): LiftDraft {
+  return {
+    exerciseId: l.exerciseId,
+    loadType: l.loadType,
+    sets: l.sets.map((s) => ({
+      weight: String(s.weight),
+      reps: String(s.reps),
+    })),
+  };
 }
 
 function liftsFromSession(
@@ -43,12 +80,7 @@ function liftsFromSession(
   if (!source.length) {
     return Array.from({ length: WEEKLY_WORKOUT_TARGET }, emptyLift);
   }
-  return source.map((l) => ({
-    exerciseId: l.exerciseId,
-    weight: String(l.weight),
-    sets: String(l.sets ?? 1),
-    reps: String(l.reps),
-  }));
+  return source.map(liftToDraft);
 }
 
 function cardioFromBlock(
@@ -75,22 +107,33 @@ function parseLifts(drafts: LiftDraft[]): GymLiftEntry[] | null {
       toast.error("Every row needs an exercise");
       return null;
     }
-    const weight = Number(d.weight);
-    const sets = Number(d.sets);
-    const reps = Number(d.reps);
-    if (!Number.isFinite(weight) || weight < 0) {
-      toast.error("Every lift needs a non-negative weight");
+    if (!d.sets.length) {
+      toast.error("Every lift needs at least one set");
       return null;
     }
-    if (!Number.isFinite(sets) || sets <= 0) {
-      toast.error("Every lift needs sets greater than zero");
-      return null;
+    const sets: GymSet[] = [];
+    for (const s of d.sets) {
+      const reps = Number(s.reps);
+      if (!Number.isFinite(reps) || reps <= 0) {
+        toast.error("Every set needs reps greater than zero");
+        return null;
+      }
+      if (d.loadType === "bodyweight") {
+        sets.push({ weight: 0, reps });
+      } else {
+        const weight = Number(s.weight);
+        if (!Number.isFinite(weight) || weight < 0) {
+          toast.error("Every set needs a non-negative weight in lb");
+          return null;
+        }
+        sets.push({ weight, reps });
+      }
     }
-    if (!Number.isFinite(reps) || reps <= 0) {
-      toast.error("Every lift needs reps greater than zero");
-      return null;
-    }
-    lifts.push({ exerciseId: d.exerciseId, weight, sets, reps });
+    lifts.push({
+      exerciseId: d.exerciseId,
+      loadType: d.loadType,
+      sets,
+    });
   }
   return lifts;
 }
@@ -114,18 +157,15 @@ function parseCardio(
 }
 
 export function GymTodayPanel() {
-  const {
-    exercises,
-    templates,
-    todaySession,
-    planToday,
-    completeToday,
-  } = useGym();
+  const { exercises, templates, todaySession, planToday, completeToday } =
+    useGym();
 
   const status = todaySession?.status;
   const [editingPlan, setEditingPlan] = useState(false);
   const showPlan =
-    !todaySession || status === "rejected" || (status === "planned" && editingPlan);
+    !todaySession ||
+    status === "rejected" ||
+    (status === "planned" && editingPlan);
   const showComplete =
     (status === "planned" && !editingPlan) || status === "rejected";
   const showSuccess = status === "accepted";
@@ -159,7 +199,11 @@ export function GymTodayPanel() {
   const [savingComplete, setSavingComplete] = useState(false);
 
   const exerciseOptions = useMemo(
-    () => exercises.map((e) => ({ id: e.id, name: e.name })),
+    () =>
+      exercises.map((e) => ({
+        id: e.id,
+        name: e.location ? `${e.name} (${e.location})` : e.name,
+      })),
     [exercises],
   );
 
@@ -227,22 +271,21 @@ export function GymTodayPanel() {
     setEditingPlan(true);
   };
 
+  const draftFromExercise = (exerciseId: string): LiftDraft => {
+    const ex = exerciseById[exerciseId];
+    return {
+      exerciseId,
+      loadType: ex?.loadType ?? "external",
+      sets: setsFromExercise(ex),
+    };
+  };
+
   const applyTemplate = (id: string) => {
     setTemplateId(id);
     if (!id) return;
     const tpl = templates.find((t) => t.id === id);
     if (!tpl) return;
-    setPlanLifts(
-      tpl.exerciseIds.map((exerciseId) => {
-        const ex = exerciseById[exerciseId];
-        return {
-          exerciseId,
-          weight: ex?.lastWeight != null ? String(ex.lastWeight) : "",
-          sets: ex?.lastSets != null ? String(ex.lastSets) : "",
-          reps: ex?.lastReps != null ? String(ex.lastReps) : "",
-        };
-      }),
-    );
+    setPlanLifts(tpl.exerciseIds.map((exerciseId) => draftFromExercise(exerciseId)));
     setPlanWarmup((w) => ({
       ...w,
       minutes: String(tpl.warmupMinutesTarget),
@@ -269,18 +312,11 @@ export function GymTodayPanel() {
     index: number,
     exerciseId: string,
   ) => {
-    const ex = exerciseById[exerciseId];
-    updateLift(list, setList, index, {
-      exerciseId,
-      weight:
-        ex?.lastWeight != null
-          ? String(ex.lastWeight)
-          : list[index]?.weight ?? "",
-      sets:
-        ex?.lastSets != null ? String(ex.lastSets) : list[index]?.sets ?? "",
-      reps:
-        ex?.lastReps != null ? String(ex.lastReps) : list[index]?.reps ?? "",
-    });
+    if (!exerciseId) {
+      updateLift(list, setList, index, emptyLift());
+      return;
+    }
+    updateLift(list, setList, index, draftFromExercise(exerciseId));
   };
 
   const onSubmitPlan = async () => {
@@ -406,8 +442,8 @@ export function GymTodayPanel() {
                   : "Plan today"}
             </h2>
             <p className="mt-1 text-sm text-muted">
-              At least {WEEKLY_WORKOUT_TARGET} resistance lifts (weight / sets /
-              reps), warm-up, and cardio.
+              At least {WEEKLY_WORKOUT_TARGET} resistance lifts with per-set
+              lb×reps (or bodyweight), warm-up, and cardio.
             </p>
           </div>
 
@@ -417,7 +453,7 @@ export function GymTodayPanel() {
               <select
                 value={templateId}
                 onChange={(e) => applyTemplate(e.target.value)}
-                className="h-10 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-foreground"
+                className={FORM_SELECT_CLASS}
               >
                 <option value="">None</option>
                 {templates.map((t) => (
@@ -489,7 +525,8 @@ export function GymTodayPanel() {
               Complete workout
             </h2>
             <p className="mt-1 text-sm text-muted">
-              Log actuals. Weight must meet or beat your last accepted lift.
+              Log actuals. External lifts need volume (Σ lb×reps) ≥ last
+              accepted.
             </p>
           </div>
 
@@ -552,6 +589,19 @@ function LiftEditor({
   onAdd: () => void;
   onRemove: (index: number) => void;
 }) {
+  const updateSet = (
+    liftIndex: number,
+    setIndex: number,
+    patch: Partial<SetDraft>,
+  ) => {
+    const row = lifts[liftIndex];
+    if (!row) return;
+    const sets = row.sets.map((s, i) =>
+      i === setIndex ? { ...s, ...patch } : s,
+    );
+    onChangeField(liftIndex, { sets });
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -569,13 +619,13 @@ function LiftEditor({
             key={`${index}-${row.exerciseId || "empty"}`}
             className="rounded-[var(--radius)] border border-border bg-bg-elevated p-3"
           >
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               <label className="flex min-w-0 flex-col gap-1.5 text-sm">
                 <span className="font-medium text-muted">Exercise</span>
                 <select
                   value={row.exerciseId}
                   onChange={(e) => onChangeExercise(index, e.target.value)}
-                  className="h-10 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-foreground"
+                  className={FORM_SELECT_CLASS}
                 >
                   <option value="">Select…</option>
                   {options.map((o) => (
@@ -585,36 +635,94 @@ function LiftEditor({
                   ))}
                 </select>
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                <TextInput
-                  label="Weight"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={row.weight}
+
+              <label className="flex flex-col gap-1.5 text-sm">
+                <span className="font-medium text-muted">Load</span>
+                <select
+                  value={row.loadType}
                   onChange={(e) =>
-                    onChangeField(index, { weight: e.target.value })
+                    onChangeField(index, {
+                      loadType: e.target.value as GymLoadType,
+                    })
                   }
-                />
-                <TextInput
-                  label="Sets"
-                  type="number"
-                  min={1}
-                  value={row.sets}
-                  onChange={(e) =>
-                    onChangeField(index, { sets: e.target.value })
-                  }
-                />
-                <TextInput
-                  label="Reps"
-                  type="number"
-                  min={1}
-                  value={row.reps}
-                  onChange={(e) =>
-                    onChangeField(index, { reps: e.target.value })
-                  }
-                />
+                  className={FORM_SELECT_CLASS}
+                >
+                  <option value="external">Barbell / machine (lb)</option>
+                  <option value="bodyweight">Bodyweight</option>
+                </select>
+              </label>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted">Sets</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      onChangeField(index, {
+                        sets: [...row.sets, emptySet()],
+                      })
+                    }
+                  >
+                    <Plus size={14} />
+                    Set
+                  </Button>
+                </div>
+                {row.sets.map((set, setIndex) => (
+                  <div
+                    key={setIndex}
+                    className="grid grid-cols-[1fr_1fr_auto] gap-2"
+                  >
+                    {row.loadType === "external" ? (
+                      <TextInput
+                        label={setIndex === 0 ? "Weight (lb)" : undefined}
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={set.weight}
+                        onChange={(e) =>
+                          updateSet(index, setIndex, {
+                            weight: e.target.value,
+                          })
+                        }
+                        aria-label={`Set ${setIndex + 1} weight`}
+                      />
+                    ) : (
+                      <div className="flex h-10 items-center text-sm text-muted">
+                        BW
+                      </div>
+                    )}
+                    <TextInput
+                      label={setIndex === 0 ? "Reps" : undefined}
+                      type="number"
+                      min={1}
+                      value={set.reps}
+                      onChange={(e) =>
+                        updateSet(index, setIndex, { reps: e.target.value })
+                      }
+                      aria-label={`Set ${setIndex + 1} reps`}
+                    />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className={setIndex === 0 ? "mt-6" : ""}
+                      onClick={() =>
+                        onChangeField(index, {
+                          sets:
+                            row.sets.length <= 1
+                              ? row.sets
+                              : row.sets.filter((_, i) => i !== setIndex),
+                        })
+                      }
+                      disabled={row.sets.length <= 1}
+                      aria-label={`Remove set ${setIndex + 1}`}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                ))}
               </div>
+
               <Button
                 size="sm"
                 variant="ghost"

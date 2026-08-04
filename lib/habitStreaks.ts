@@ -3,11 +3,11 @@ import {
   addLocalDays,
   compareLocalDates,
   eachLocalDate,
-  isSaturday,
   toLocalDateString,
   weekBounds,
   yesterdayLocalDate,
 } from "./dates";
+import { isWithinActiveRange } from "./activeRange";
 import { isHabitDueOn, isScheduledOn } from "./habitSchedule";
 
 export type StreakFields = {
@@ -35,11 +35,44 @@ export function countCompletionsInWeek(
 }
 
 /**
+ * Last calendar day in the habit week (Sun–Sat) that falls inside the
+ * habit's active window. N×/week streaks resolve on this day (Saturday when
+ * the window covers the full week).
+ */
+export function timesPerWeekResolveDate(
+  habit: Pick<Habit, "activeStartLocalDate" | "activeEndLocalDate">,
+  localDateInWeek: string,
+): string | null {
+  const { start, end } = weekBounds(localDateInWeek);
+  let lastActive: string | null = null;
+  for (const d of eachLocalDate(start, end)) {
+    if (
+      isWithinActiveRange(
+        d,
+        habit.activeStartLocalDate,
+        habit.activeEndLocalDate,
+      )
+    ) {
+      lastActive = d;
+    }
+  }
+  return lastActive;
+}
+
+/**
  * Resolve streak effects for the end of `localDate` (day-boundary).
  * Does not advance lastResolved — caller does.
  */
 export function resolveHabitStreakOnDayBoundary(
-  habit: Pick<Habit, "schedule" | "paused" | "currentStreak" | "longestStreak">,
+  habit: Pick<
+    Habit,
+    | "schedule"
+    | "paused"
+    | "currentStreak"
+    | "longestStreak"
+    | "activeStartLocalDate"
+    | "activeEndLocalDate"
+  >,
   localDate: string,
   completedDates: ReadonlySet<string>,
 ): StreakFields {
@@ -50,11 +83,26 @@ export function resolveHabitStreakOnDayBoundary(
     };
   }
 
+  if (
+    !isWithinActiveRange(
+      localDate,
+      habit.activeStartLocalDate,
+      habit.activeEndLocalDate,
+    )
+  ) {
+    // Outside active window: freeze streak (no miss).
+    return {
+      currentStreak: habit.currentStreak,
+      longestStreak: habit.longestStreak,
+    };
+  }
+
   let currentStreak = habit.currentStreak;
   const longestStreak = habit.longestStreak;
 
   if (habit.schedule.type === "timesPerWeek") {
-    if (!isSaturday(localDate)) {
+    const resolveOn = timesPerWeekResolveDate(habit, localDate);
+    if (resolveOn !== localDate) {
       return { currentStreak, longestStreak };
     }
     const count = countCompletionsInWeek(completedDates, localDate);
@@ -136,6 +184,8 @@ export function catchUpHabitStreaks(
     | "currentStreak"
     | "longestStreak"
     | "lastResolvedLocalDate"
+    | "activeStartLocalDate"
+    | "activeEndLocalDate"
   >,
   completedDates: ReadonlySet<string>,
   today: string = toLocalDateString(),
@@ -163,6 +213,8 @@ export function catchUpHabitStreaks(
         paused: habit.paused,
         currentStreak,
         longestStreak,
+        activeStartLocalDate: habit.activeStartLocalDate,
+        activeEndLocalDate: habit.activeEndLocalDate,
       },
       localDate,
       completedDates,

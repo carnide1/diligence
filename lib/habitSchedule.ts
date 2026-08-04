@@ -1,5 +1,22 @@
 import type { Habit, HabitSchedule } from "../types/habit";
 import { dayOfWeek } from "./dates";
+import { isWithinActiveRange } from "./activeRange";
+
+/** Normalize Firestore / raw schedule payloads. */
+export function parseHabitSchedule(raw: unknown): HabitSchedule {
+  if (!raw || typeof raw !== "object") return { type: "everyDay" };
+  const s = raw as Record<string, unknown>;
+  if (s.type === "weekdays" && Array.isArray(s.days)) {
+    return {
+      type: "weekdays",
+      days: s.days.filter((d): d is number => typeof d === "number"),
+    };
+  }
+  if (s.type === "timesPerWeek" && typeof s.n === "number") {
+    return { type: "timesPerWeek", n: s.n };
+  }
+  return { type: "everyDay" };
+}
 
 /** Schedule obligation ignoring pause / N× quota (used for miss checks). */
 export function isScheduledOn(
@@ -20,14 +37,30 @@ export function isScheduledOn(
 
 /**
  * Whether the habit should appear / be completable on localDate.
- * Paused → never due. N×/week hidden once weekly quota is met.
+ * Paused → never due. Outside active date range → never due.
+ * N×/week hidden once weekly quota is met.
  */
 export function isHabitDueOn(
-  habit: Pick<Habit, "schedule" | "paused">,
+  habit: Pick<
+    Habit,
+    | "schedule"
+    | "paused"
+    | "activeStartLocalDate"
+    | "activeEndLocalDate"
+  >,
   localDate: string,
   completionsThisWeek: number,
 ): boolean {
   if (habit.paused) return false;
+  if (
+    !isWithinActiveRange(
+      localDate,
+      habit.activeStartLocalDate,
+      habit.activeEndLocalDate,
+    )
+  ) {
+    return false;
+  }
   if (!isScheduledOn(habit.schedule, localDate)) return false;
 
   if (habit.schedule.type === "timesPerWeek") {

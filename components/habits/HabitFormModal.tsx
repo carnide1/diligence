@@ -11,17 +11,42 @@ import { WEEKDAY_OPTIONS } from "@/lib/weekdays";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { TextInput } from "@/components/ui/TextInput";
+import { FORM_SELECT_CLASS } from "@/components/ui/formStyles";
 import { IconPicker } from "@/components/icons/IconPicker";
 
-const schema = z.object({
-  title: z.string().trim().min(1, "Title is required").max(80),
-  description: z.string().max(280).optional(),
-  dayPart: z.custom<DayPartKey>((v) =>
-    typeof v === "string" && (DAY_PART_KEYS as readonly string[]).includes(v),
-  ),
-  scheduleType: z.enum(["everyDay", "weekdays", "timesPerWeek"]),
-  timesPerWeek: z.number().int().min(1).max(7).optional(),
-});
+const schema = z
+  .object({
+    title: z.string().trim().min(1, "Title is required").max(80),
+    description: z.string().max(280).optional(),
+    dayPart: z.custom<DayPartKey>((v) =>
+      typeof v === "string" && (DAY_PART_KEYS as readonly string[]).includes(v),
+    ),
+    scheduleType: z.enum(["everyDay", "weekdays", "timesPerWeek"]),
+    timesPerWeek: z.number().int().min(1).max(7).optional(),
+    limitedDates: z.boolean(),
+    activeStartLocalDate: z.string().optional(),
+    activeEndLocalDate: z.string().optional(),
+  })
+  .superRefine((values, ctx) => {
+    if (!values.limitedDates) return;
+    const start = values.activeStartLocalDate?.trim() || "";
+    const end = values.activeEndLocalDate?.trim() || "";
+    if (!start && !end) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Pick a start date, end date, or both",
+        path: ["activeStartLocalDate"],
+      });
+      return;
+    }
+    if (start && end && start > end) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Start must be on or before end",
+        path: ["activeEndLocalDate"],
+      });
+    }
+  });
 
 type FormValues = z.infer<typeof schema>;
 
@@ -50,6 +75,11 @@ export function HabitFormModal({
       scheduleType: initial?.schedule.type ?? "everyDay",
       timesPerWeek:
         initial?.schedule.type === "timesPerWeek" ? initial.schedule.n : 3,
+      limitedDates: Boolean(
+        initial?.activeStartLocalDate || initial?.activeEndLocalDate,
+      ),
+      activeStartLocalDate: initial?.activeStartLocalDate ?? "",
+      activeEndLocalDate: initial?.activeEndLocalDate ?? "",
     }),
     [initial],
   );
@@ -66,6 +96,7 @@ export function HabitFormModal({
   });
 
   const scheduleType = watch("scheduleType");
+  const limitedDates = watch("limitedDates");
 
   useEffect(() => {
     if (!open) return;
@@ -105,6 +136,12 @@ export function HabitFormModal({
         icon,
         dayPart: values.dayPart,
         schedule,
+        activeStartLocalDate: values.limitedDates
+          ? values.activeStartLocalDate?.trim() || null
+          : null,
+        activeEndLocalDate: values.limitedDates
+          ? values.activeEndLocalDate?.trim() || null
+          : null,
       });
       onClose();
     } finally {
@@ -149,10 +186,7 @@ export function HabitFormModal({
 
         <label className="flex flex-col gap-2 text-sm">
           <span className="font-medium text-muted">Day part</span>
-          <select
-            className="h-10 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-foreground"
-            {...register("dayPart")}
-          >
+          <select className={FORM_SELECT_CLASS} {...register("dayPart")}>
             {DAY_PART_KEYS.map((key) => (
               <option key={key} value={key}>
                 {DAY_PART_LABELS[key]}
@@ -163,10 +197,7 @@ export function HabitFormModal({
 
         <label className="flex flex-col gap-2 text-sm">
           <span className="font-medium text-muted">Schedule</span>
-          <select
-            className="h-10 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-foreground"
-            {...register("scheduleType")}
-          >
+          <select className={FORM_SELECT_CLASS} {...register("scheduleType")}>
             <option value="everyDay">Every day</option>
             <option value="weekdays">Specific weekdays</option>
             <option value="timesPerWeek">Variable total days / week</option>
@@ -213,7 +244,28 @@ export function HabitFormModal({
           />
         ) : null}
 
-        {/* Room so native select menus aren't jammed against the footer */}
+        <label className="flex items-center gap-2 text-sm text-muted">
+          <input type="checkbox" {...register("limitedDates")} />
+          Limited date range
+        </label>
+
+        {limitedDates ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextInput
+              label="Start date"
+              type="date"
+              error={errors.activeStartLocalDate?.message}
+              {...register("activeStartLocalDate")}
+            />
+            <TextInput
+              label="End date"
+              type="date"
+              error={errors.activeEndLocalDate?.message}
+              {...register("activeEndLocalDate")}
+            />
+          </div>
+        ) : null}
+
         <div className="h-2 shrink-0" aria-hidden />
       </form>
     </Modal>

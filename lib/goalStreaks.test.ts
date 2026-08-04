@@ -15,6 +15,8 @@ function goal(
     createdLocalDate: "2026-07-10",
     status: "active",
     deletedAt: null,
+    activeStartLocalDate: null,
+    activeEndLocalDate: null,
     completionDates: [],
     ...partial,
   };
@@ -67,6 +69,14 @@ describe("goalStreaks", () => {
     const due = goalsDueOnDay(goals, "2026-07-13");
     assert.equal(due.length, 1);
     assert.equal(isLeftoverGoal("2026-07-10", "2026-07-13"), true);
+    assert.equal(
+      isLeftoverGoal("2026-07-10", "2026-07-13", "2026-07-13"),
+      false,
+    );
+    assert.equal(
+      isLeftoverGoal("2026-07-10", "2026-07-14", "2026-07-13"),
+      true,
+    );
   });
 
   it("already finished earlier goals are not due again", () => {

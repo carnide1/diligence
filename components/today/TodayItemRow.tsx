@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Flag, GripVertical, Repeat } from "lucide-react";
@@ -27,15 +28,19 @@ export function TodayItemRow({ item, onToggle }: TodayItemRowProps) {
     opacity: isDragging ? 0.7 : 1,
   };
 
+  const href = item.kind === "habit" ? "/habits" : "/goals";
+  const description =
+    item.kind === "habit" ? item.habit.description : item.goal.description;
+
   return (
     <li
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-2 rounded-[var(--radius)] border border-border bg-bg-elevated/60 px-2 py-2.5"
+      className="flex items-start gap-2 rounded-[var(--radius)] border border-border bg-bg-elevated/60 px-2 py-2.5"
     >
       <button
         type="button"
-        className="cursor-grab touch-none p-1 text-faint hover:text-muted active:cursor-grabbing"
+        className="mt-0.5 cursor-grab touch-none p-1 text-faint hover:text-muted active:cursor-grabbing"
         aria-label="Drag to reorder"
         {...attributes}
         {...listeners}
@@ -47,7 +52,7 @@ export function TodayItemRow({ item, onToggle }: TodayItemRowProps) {
         type="button"
         onClick={onToggle}
         className={[
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm",
+          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm",
           item.done
             ? "border-success bg-success-soft text-success"
             : "border-border text-faint",
@@ -57,33 +62,40 @@ export function TodayItemRow({ item, onToggle }: TodayItemRowProps) {
         {item.done ? "✓" : ""}
       </button>
 
-      <span className="text-accent">
+      <span className="mt-1 shrink-0 text-accent">
         <HabitIcon iconKey={item.icon} size={18} />
       </span>
 
       <div className="min-w-0 flex-1">
-        <p
+        <Link
+          href={href}
           className={[
-            "truncate text-sm font-medium",
+            "block break-words text-sm font-medium hover:text-accent",
             item.done ? "text-muted line-through" : "text-foreground",
           ].join(" ")}
         >
           {item.title}
-        </p>
+        </Link>
         {item.kind === "goal" && item.leftover && !item.done ? (
           <span className="text-[10px] uppercase tracking-wide text-accent">
             Leftover
           </span>
         ) : null}
+        {description?.trim() ? (
+          <p className="mt-1 line-clamp-2 break-words text-xs text-muted">
+            {description}
+          </p>
+        ) : null}
       </div>
 
-      <span
-        className="shrink-0 text-faint"
-        title={item.kind === "habit" ? "Habit" : "Goal"}
-        aria-label={item.kind === "habit" ? "Habit" : "Goal"}
+      <Link
+        href={href}
+        className="mt-1 shrink-0 text-faint hover:text-accent"
+        title={item.kind === "habit" ? "Open Habits" : "Open Goals"}
+        aria-label={item.kind === "habit" ? "Open Habits" : "Open Goals"}
       >
         {item.kind === "habit" ? <Repeat size={15} /> : <Flag size={15} />}
-      </span>
+      </Link>
     </li>
   );
 }

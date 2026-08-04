@@ -15,6 +15,8 @@ function habit(partial: Partial<Habit> & Pick<Habit, "id" | "schedule">): Habit 
     longestStreak: 0,
     lastResolvedLocalDate: null,
     createdLocalDate: "2026-07-01",
+    activeStartLocalDate: null,
+    activeEndLocalDate: null,
     deletedAt: null,
     ...partial,
   };
@@ -91,5 +93,29 @@ describe("calendarData createdLocalDate", () => {
     // 2 empty slots + 1 completion = 3 scheduled when week is partial through Sat.
     assert.equal(rate.scheduled, 3);
     assert.equal(rate.completed, 1);
+  });
+
+  it("does not treat days outside active range as misses", () => {
+    const h = habit({
+      id: "a",
+      schedule: { type: "everyDay" },
+      createdLocalDate: "2026-07-01",
+      activeStartLocalDate: "2026-07-14",
+      activeEndLocalDate: "2026-07-16",
+    });
+    const days = buildCalendarDays({
+      anchor: new Date(2026, 6, 1),
+      today: "2026-07-16",
+      habits: [h],
+      goals: [],
+      habitCompletions: [],
+      goalCompletions: [],
+    });
+    const jul13 = days.find((d) => d.localDate === "2026-07-13");
+    const jul14 = days.find((d) => d.localDate === "2026-07-14");
+    assert.ok(jul13);
+    assert.ok(jul14);
+    assert.equal(jul13!.scheduledHabitCount, 0);
+    assert.equal(jul14!.scheduledHabitCount, 1);
   });
 });

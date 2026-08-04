@@ -11,6 +11,9 @@ export type Goal = {
   order: number;
   createdLocalDate: string;
   status: GoalStatus;
+  /** Inclusive active window; null = open-ended. Soft-deleted after end. */
+  activeStartLocalDate: string | null;
+  activeEndLocalDate: string | null;
   deletedAt: string | null;
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -29,6 +32,8 @@ export type GoalInput = {
   icon: string;
   dayPart: DayPartKey;
   order?: number;
+  activeStartLocalDate?: string | null;
+  activeEndLocalDate?: string | null;
 };
 
 /** Snapshot needed to resolve goal streak for past days. */
@@ -37,6 +42,8 @@ export type GoalStreakSnapshot = {
   createdLocalDate: string;
   status: GoalStatus;
   deletedAt: string | null;
+  activeStartLocalDate: string | null;
+  activeEndLocalDate: string | null;
   /** Completion dates for this goal (YYYY-MM-DD). */
   completionDates: string[];
 };

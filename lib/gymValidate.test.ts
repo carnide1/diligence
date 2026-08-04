@@ -9,7 +9,7 @@ import {
   weekAtRisk,
 } from "./gymWeek";
 import {
-  buildLastWeightMap,
+  buildLastVolumeMap,
   validateSession,
   validateSessionShape,
 } from "./gymValidate";
@@ -76,11 +76,31 @@ describe("gymWeek", () => {
 
 describe("gymValidate", () => {
   const five = [
-    { exerciseId: "a", weight: 100, sets: 3, reps: 5 },
-    { exerciseId: "b", weight: 100, sets: 3, reps: 5 },
-    { exerciseId: "c", weight: 100, sets: 3, reps: 5 },
-    { exerciseId: "d", weight: 100, sets: 3, reps: 5 },
-    { exerciseId: "e", weight: 100, sets: 3, reps: 5 },
+    {
+      exerciseId: "a",
+      loadType: "external" as const,
+      sets: [{ weight: 100, reps: 5 }, { weight: 100, reps: 5 }, { weight: 100, reps: 5 }],
+    },
+    {
+      exerciseId: "b",
+      loadType: "external" as const,
+      sets: [{ weight: 100, reps: 5 }, { weight: 100, reps: 5 }, { weight: 100, reps: 5 }],
+    },
+    {
+      exerciseId: "c",
+      loadType: "external" as const,
+      sets: [{ weight: 100, reps: 5 }, { weight: 100, reps: 5 }, { weight: 100, reps: 5 }],
+    },
+    {
+      exerciseId: "d",
+      loadType: "external" as const,
+      sets: [{ weight: 100, reps: 5 }, { weight: 100, reps: 5 }, { weight: 100, reps: 5 }],
+    },
+    {
+      exerciseId: "e",
+      loadType: "external" as const,
+      sets: [{ weight: 100, reps: 5 }, { weight: 100, reps: 5 }, { weight: 100, reps: 5 }],
+    },
   ];
   const warmup = { minutes: 5, calories: 20, machine: "bike" };
   const cardio = { minutes: 20, calories: 150, machine: "treadmill" };
@@ -100,7 +120,11 @@ describe("gymValidate", () => {
   it("rejects duplicate exercises", () => {
     const dup = [
       ...five.slice(0, 4),
-      { exerciseId: "a", weight: 110, sets: 3, reps: 5 },
+      {
+        exerciseId: "a",
+        loadType: "external" as const,
+        sets: [{ weight: 110, reps: 5 }],
+      },
     ];
     const result = validateSessionShape({
       exercises: dup,
@@ -110,35 +134,63 @@ describe("gymValidate", () => {
     assert.equal(result.ok, false);
   });
 
-  it("passes first use and rejects weight regression", () => {
+  it("passes first use and rejects volume regression", () => {
     const first = validateSession({
       exercises: five,
       warmup,
       cardio,
-      lastWeightByExerciseId: {},
+      lastVolumeByExerciseId: {},
     });
     assert.equal(first.ok, true);
 
+    // 3×100×5 = 1500 volume
     const hold = validateSession({
       exercises: five,
       warmup,
       cardio,
-      lastWeightByExerciseId: buildLastWeightMap(
-        five.map((e) => ({ id: e.exerciseId, lastWeight: 100 })),
+      lastVolumeByExerciseId: buildLastVolumeMap(
+        five.map((e) => ({
+          id: e.exerciseId,
+          lastVolume: 1500,
+          lastWeight: null,
+          lastSets: null,
+          lastReps: null,
+        })),
       ),
     });
     assert.equal(hold.ok, true);
 
     const drop = validateSession({
       exercises: [
-        { exerciseId: "a", weight: 90, sets: 3, reps: 8 },
+        {
+          exerciseId: "a",
+          loadType: "external",
+          sets: [{ weight: 90, reps: 5 }, { weight: 90, reps: 5 }, { weight: 90, reps: 5 }],
+        },
         ...five.slice(1),
       ],
       warmup,
       cardio,
-      lastWeightByExerciseId: { a: 100 },
+      lastVolumeByExerciseId: { a: 1500 },
     });
     assert.equal(drop.ok, false);
+  });
+
+  it("skips volume gate for bodyweight lifts", () => {
+    const result = validateSession({
+      exercises: [
+        {
+          exerciseId: "a",
+          loadType: "bodyweight",
+          sets: [{ weight: 0, reps: 10 }],
+        },
+        ...five.slice(1),
+      ],
+      warmup,
+      cardio,
+      lastVolumeByExerciseId: { a: 9999 },
+    });
+    assert.equal(result.ok, true);
   });
 });
 

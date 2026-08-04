@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { Pencil, Trash2 } from "lucide-react";
 import { useGoals } from "@/contexts/GoalsContext";
 import { toErrorMessage } from "@/lib/errors";
 import { useDayPartGroups } from "@/hooks/useDayPartGroups";
@@ -10,8 +11,10 @@ import { GoalFormModal } from "@/components/goals/GoalFormModal";
 import { HabitIcon } from "@/components/icons/HabitIcon";
 import { DayPartSection } from "@/components/ui/DayPartSection";
 import { Button } from "@/components/ui/Button";
+import { EntityDescription } from "@/components/ui/EntityDescription";
 import { EntityListShell } from "@/components/layout/EntityListShell";
 import { StatTile } from "@/components/ui/StatTile";
+import { describeActiveRange } from "@/lib/activeRange";
 
 export default function GoalsPage() {
   const {
@@ -105,12 +108,16 @@ export default function GoalsPage() {
               {group.items.map((goal) => {
                 const done = goal.status === "completed";
                 const leftover = isLeftover(goal);
+                const rangeLabel = describeActiveRange(
+                  goal.activeStartLocalDate,
+                  goal.activeEndLocalDate,
+                );
                 return (
                   <li
                     key={goal.id}
                     className="rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-3"
                   >
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-4">
                       <button
                         type="button"
                         onClick={() => void onToggle(goal)}
@@ -127,12 +134,12 @@ export default function GoalsPage() {
 
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-accent">
-                            <HabitIcon iconKey={goal.icon} size={18} />
+                          <span className="shrink-0 text-accent">
+                            <HabitIcon iconKey={goal.icon} size={20} />
                           </span>
                           <p
                             className={[
-                              "truncate font-medium",
+                              "break-words font-medium",
                               done
                                 ? "text-muted line-through"
                                 : "text-foreground",
@@ -146,32 +153,44 @@ export default function GoalsPage() {
                             </span>
                           ) : null}
                         </div>
-                        {goal.description ? (
-                          <p className="mt-1 text-xs text-muted">
-                            {goal.description}
-                          </p>
+                        {rangeLabel ? (
+                          <p className="mt-1 text-xs text-muted">{rangeLabel}</p>
                         ) : null}
                       </div>
+
+                      {goal.description ? (
+                        <div className="hidden w-[12rem] shrink-0 md:block md:w-[14rem]">
+                          <EntityDescription text={goal.description} />
+                        </div>
+                      ) : null}
                     </div>
 
-                    {!done ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => openEdit(goal)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => void onDelete(goal)}
-                        >
-                          Delete
-                        </Button>
+                    {goal.description ? (
+                      <div className="mt-3 md:hidden">
+                        <EntityDescription text={goal.description} />
                       </div>
                     ) : null}
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => openEdit(goal)}
+                      >
+                        <Pencil size={14} />
+                        Edit
+                      </Button>
+                      {!done ? (
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => void onDelete(goal)}
+                        >
+                          <Trash2 size={14} />
+                          Delete
+                        </Button>
+                      ) : null}
+                    </div>
                   </li>
                 );
               })}

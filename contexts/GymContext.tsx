@@ -166,10 +166,13 @@ export function GymProvider({ children }: { children: ReactNode }) {
   const editExercise = useCallback(
     async (id: string, input: GymExerciseInput) => {
       if (!user) throw new Error("Sign in required");
-      await updateExercise(user.uid, id, input);
+      const previous = exercises.find((e) => e.id === id);
+      await updateExercise(user.uid, id, input, {
+        previousLocation: previous?.location,
+      });
       await refresh();
     },
-    [user, refresh],
+    [user, refresh, exercises],
   );
 
   const removeExercise = useCallback(
