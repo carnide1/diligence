@@ -4,6 +4,7 @@ export type GymExercise = {
   /** Free-text tags (muscle group, split, etc.). */
   tags: string[];
   lastWeight: number | null;
+  lastSets: number | null;
   lastReps: number | null;
   lastUsedLocalDate: string | null;
   timesUsed: number;
@@ -39,12 +40,15 @@ export type GymTemplateInput = {
 export type GymLiftEntry = {
   exerciseId: string;
   weight: number;
+  sets: number;
   reps: number;
 };
 
 export type GymCardioBlock = {
   minutes: number;
   calories: number;
+  /** Cardio machine name (e.g. treadmill, bike). */
+  machine: string;
 };
 
 export type GymSessionStatus = "planned" | "accepted" | "rejected";

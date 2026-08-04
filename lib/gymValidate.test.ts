@@ -76,14 +76,14 @@ describe("gymWeek", () => {
 
 describe("gymValidate", () => {
   const five = [
-    { exerciseId: "a", weight: 100, reps: 5 },
-    { exerciseId: "b", weight: 100, reps: 5 },
-    { exerciseId: "c", weight: 100, reps: 5 },
-    { exerciseId: "d", weight: 100, reps: 5 },
-    { exerciseId: "e", weight: 100, reps: 5 },
+    { exerciseId: "a", weight: 100, sets: 3, reps: 5 },
+    { exerciseId: "b", weight: 100, sets: 3, reps: 5 },
+    { exerciseId: "c", weight: 100, sets: 3, reps: 5 },
+    { exerciseId: "d", weight: 100, sets: 3, reps: 5 },
+    { exerciseId: "e", weight: 100, sets: 3, reps: 5 },
   ];
-  const warmup = { minutes: 5, calories: 20 };
-  const cardio = { minutes: 20, calories: 150 };
+  const warmup = { minutes: 5, calories: 20, machine: "bike" };
+  const cardio = { minutes: 20, calories: 150, machine: "treadmill" };
 
   it("requires shape: 5 lifts, warmup 5+, cardio 20+", () => {
     const bad = validateSessionShape({
@@ -100,7 +100,7 @@ describe("gymValidate", () => {
   it("rejects duplicate exercises", () => {
     const dup = [
       ...five.slice(0, 4),
-      { exerciseId: "a", weight: 110, reps: 5 },
+      { exerciseId: "a", weight: 110, sets: 3, reps: 5 },
     ];
     const result = validateSessionShape({
       exercises: dup,
@@ -131,7 +131,7 @@ describe("gymValidate", () => {
 
     const drop = validateSession({
       exercises: [
-        { exerciseId: "a", weight: 90, reps: 8 },
+        { exerciseId: "a", weight: 90, sets: 3, reps: 8 },
         ...five.slice(1),
       ],
       warmup,

@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Pencil, Trash2 } from "lucide-react";
 import { useGym } from "@/contexts/GymContext";
 import { toErrorMessage } from "@/lib/errors";
+import { collectUniqueTags, filterExercises } from "@/lib/gymValidate";
 import type { GymExercise } from "@/types/gym";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { TextInput } from "@/components/ui/TextInput";
+import { ExerciseFilterBar } from "@/components/gym/ExerciseFilterBar";
 
 function parseTags(raw: string): string[] {
   return raw
@@ -24,6 +26,14 @@ export function GymExercisesPanel() {
   const [name, setName] = useState("");
   const [tagsRaw, setTagsRaw] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [query, setQuery] = useState("");
+  const [tag, setTag] = useState("");
+
+  const allTags = useMemo(() => collectUniqueTags(exercises), [exercises]);
+  const filtered = useMemo(
+    () => filterExercises(exercises, { query, tag }),
+    [exercises, query, tag],
+  );
 
   const openCreate = () => {
     setEditing(null);
@@ -82,13 +92,29 @@ export function GymExercisesPanel() {
         <Button onClick={openCreate}>New</Button>
       </div>
 
+      {exercises.length > 0 ? (
+        <ExerciseFilterBar
+          query={query}
+          onQueryChange={setQuery}
+          tag={tag}
+          onTagChange={setTag}
+          tags={allTags}
+          resultCount={filtered.length}
+          totalCount={exercises.length}
+        />
+      ) : null}
+
       {exercises.length === 0 ? (
         <div className="rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-8 text-center text-sm text-muted">
           No exercises yet. Add one to build workouts.
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-8 text-center text-sm text-muted">
+          No exercises match this search.
+        </div>
       ) : (
         <ul className="flex flex-col gap-3">
-          {exercises.map((ex) => (
+          {filtered.map((ex) => (
             <li
               key={ex.id}
               className="rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-3"
@@ -101,9 +127,13 @@ export function GymExercisesPanel() {
                   </p>
                 ) : null}
                 <p className="mt-1 text-xs text-faint">
-                  {ex.lastWeight != null && ex.lastReps != null
-                    ? `Last ${ex.lastWeight}×${ex.lastReps}`
-                    : "No lifts yet"}
+                  {ex.lastWeight != null &&
+                  ex.lastSets != null &&
+                  ex.lastReps != null
+                    ? `Last ${ex.lastWeight} × ${ex.lastSets}×${ex.lastReps}`
+                    : ex.lastWeight != null && ex.lastReps != null
+                      ? `Last ${ex.lastWeight}×${ex.lastReps}`
+                      : "No lifts yet"}
                   {" · "}
                   Used {ex.timesUsed}×
                 </p>

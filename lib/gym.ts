@@ -22,8 +22,10 @@ import { catchUpGymStreaks } from "@/lib/gymStreak";
 import type {
   GymAbsence,
   GymAbsenceInput,
+  GymCardioBlock,
   GymExercise,
   GymExerciseInput,
+  GymLiftEntry,
   GymSession,
   GymSessionCompleteInput,
   GymSessionPlanInput,
@@ -56,6 +58,7 @@ function mapExercise(id: string, data: Record<string, unknown>): GymExercise {
       ? data.tags.filter((t): t is string => typeof t === "string")
       : [],
     lastWeight: typeof data.lastWeight === "number" ? data.lastWeight : null,
+    lastSets: typeof data.lastSets === "number" ? data.lastSets : null,
     lastReps: typeof data.lastReps === "number" ? data.lastReps : null,
     lastUsedLocalDate:
       typeof data.lastUsedLocalDate === "string"
@@ -92,20 +95,26 @@ function mapTemplate(id: string, data: Record<string, unknown>): GymTemplate {
   };
 }
 
-function mapLift(raw: unknown): { exerciseId: string; weight: number; reps: number } | null {
+function mapLift(raw: unknown): GymLiftEntry | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   if (typeof o.exerciseId !== "string") return null;
   if (typeof o.weight !== "number" || typeof o.reps !== "number") return null;
-  return { exerciseId: o.exerciseId, weight: o.weight, reps: o.reps };
+  const sets =
+    typeof o.sets === "number" && Number.isFinite(o.sets) ? o.sets : 1;
+  return { exerciseId: o.exerciseId, weight: o.weight, sets, reps: o.reps };
 }
 
-function mapCardio(raw: unknown): { minutes: number; calories: number } | null {
+function mapCardio(raw: unknown): GymCardioBlock | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   if (typeof o.minutes !== "number" || typeof o.calories !== "number")
     return null;
-  return { minutes: o.minutes, calories: o.calories };
+  return {
+    minutes: o.minutes,
+    calories: o.calories,
+    machine: typeof o.machine === "string" ? o.machine : "",
+  };
 }
 
 function mapSession(id: string, data: Record<string, unknown>): GymSession {
@@ -128,10 +137,12 @@ function mapSession(id: string, data: Record<string, unknown>): GymSession {
     plannedWarmup: mapCardio(data.plannedWarmup) ?? {
       minutes: 5,
       calories: 20,
+      machine: "",
     },
     plannedCardio: mapCardio(data.plannedCardio) ?? {
       minutes: 20,
       calories: 100,
+      machine: "",
     },
     actualWarmup: mapCardio(data.actualWarmup),
     actualCardio: mapCardio(data.actualCardio),
@@ -191,6 +202,7 @@ export async function createExercise(
     name: input.name.trim(),
     tags: input.tags.map((t) => t.trim()).filter(Boolean),
     lastWeight: null,
+    lastSets: null,
     lastReps: null,
     lastUsedLocalDate: null,
     timesUsed: 0,
@@ -395,6 +407,7 @@ export async function completeDailySession(
     if (!ex) continue;
     batch.update(doc(exercisesCol(uid), lift.exerciseId), {
       lastWeight: lift.weight,
+      lastSets: lift.sets,
       lastReps: lift.reps,
       lastUsedLocalDate: current.localDate,
       timesUsed: (ex.timesUsed ?? 0) + 1,

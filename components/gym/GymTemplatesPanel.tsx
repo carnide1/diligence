@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Pencil, Trash2 } from "lucide-react";
 import { useGym } from "@/contexts/GymContext";
 import { toErrorMessage } from "@/lib/errors";
+import { collectUniqueTags, filterExercises } from "@/lib/gymValidate";
 import {
   CARDIO_MINUTES_MIN,
   WARMUP_MINUTES_MIN,
@@ -14,6 +15,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { TextInput } from "@/components/ui/TextInput";
+import { ExerciseFilterBar } from "@/components/gym/ExerciseFilterBar";
 
 type FormState = {
   name: string;
@@ -43,10 +45,20 @@ export function GymTemplatesPanel() {
   const [editing, setEditing] = useState<GymTemplate | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [query, setQuery] = useState("");
+  const [tag, setTag] = useState("");
+
+  const allTags = useMemo(() => collectUniqueTags(exercises), [exercises]);
+  const filteredExercises = useMemo(
+    () => filterExercises(exercises, { query, tag }),
+    [exercises, query, tag],
+  );
 
   const openCreate = () => {
     setEditing(null);
     setForm(emptyForm());
+    setQuery("");
+    setTag("");
     setModalOpen(true);
   };
 
@@ -59,6 +71,8 @@ export function GymTemplatesPanel() {
       cardioMinutesTarget: String(tpl.cardioMinutesTarget),
       cardioCaloriesTarget: String(tpl.cardioCaloriesTarget),
     });
+    setQuery("");
+    setTag("");
     setModalOpen(true);
   };
 
@@ -219,21 +233,45 @@ export function GymTemplatesPanel() {
             {exercises.length === 0 ? (
               <p className="text-xs text-faint">Add exercises first.</p>
             ) : (
-              <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto">
-                {exercises.map((ex) => (
-                  <li key={ex.id}>
-                    <label className="flex cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-sm hover:bg-bg-overlay">
-                      <input
-                        type="checkbox"
-                        checked={form.exerciseIds.includes(ex.id)}
-                        onChange={() => toggleExercise(ex.id)}
-                        className="accent-current"
-                      />
-                      <span className="text-foreground">{ex.name}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ExerciseFilterBar
+                  query={query}
+                  onQueryChange={setQuery}
+                  tag={tag}
+                  onTagChange={setTag}
+                  tags={allTags}
+                  resultCount={filteredExercises.length}
+                  totalCount={exercises.length}
+                />
+                <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+                  {filteredExercises.length === 0 ? (
+                    <li className="px-2 py-1.5 text-xs text-faint">
+                      No exercises match.
+                    </li>
+                  ) : (
+                    filteredExercises.map((ex) => (
+                      <li key={ex.id}>
+                        <label className="flex cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-sm hover:bg-bg-overlay">
+                          <input
+                            type="checkbox"
+                            checked={form.exerciseIds.includes(ex.id)}
+                            onChange={() => toggleExercise(ex.id)}
+                            className="accent-current"
+                          />
+                          <span className="min-w-0 flex-1 text-foreground">
+                            {ex.name}
+                            {ex.tags.length > 0 ? (
+                              <span className="ml-1 text-xs text-faint">
+                                ({ex.tags.join(", ")})
+                              </span>
+                            ) : null}
+                          </span>
+                        </label>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </>
             )}
           </fieldset>
 

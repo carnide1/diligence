@@ -54,6 +54,10 @@ export function validateSessionShape(args: {
       reasons.push("Every lift needs a non-negative weight.");
       break;
     }
+    if (!isValidNumber(lift.sets) || lift.sets <= 0) {
+      reasons.push("Every lift needs sets greater than zero.");
+      break;
+    }
     if (!isValidNumber(lift.reps) || lift.reps <= 0) {
       reasons.push("Every lift needs reps greater than zero.");
       break;
@@ -66,11 +70,17 @@ export function validateSessionShape(args: {
   if (!isValidNumber(warmup.calories) || warmup.calories <= 0) {
     reasons.push("Warm-up needs a calorie count greater than zero.");
   }
+  if (!warmup.machine?.trim()) {
+    reasons.push("Warm-up needs a machine name.");
+  }
   if (!isValidNumber(cardio.minutes) || cardio.minutes < CARDIO_MINUTES_MIN) {
     reasons.push(`Cardio must be at least ${CARDIO_MINUTES_MIN} minutes.`);
   }
   if (!isValidNumber(cardio.calories) || cardio.calories <= 0) {
     reasons.push("Cardio needs a calorie count greater than zero.");
+  }
+  if (!cardio.machine?.trim()) {
+    reasons.push("Cardio needs a machine name.");
   }
 
   return reasons.length ? { ok: false, reasons } : { ok: true };
@@ -122,4 +132,31 @@ export function buildLastWeightMap(
     map[e.id] = e.lastWeight;
   }
   return map;
+}
+
+/** Filter exercises by name search and optional tag (case-insensitive). */
+export function filterExercises<T extends { name: string; tags: string[] }>(
+  exercises: T[],
+  opts: { query?: string; tag?: string },
+): T[] {
+  const q = opts.query?.trim().toLowerCase() ?? "";
+  const tag = opts.tag?.trim().toLowerCase() ?? "";
+  return exercises.filter((e) => {
+    if (q && !e.name.toLowerCase().includes(q)) return false;
+    if (tag && !e.tags.some((t) => t.toLowerCase() === tag)) return false;
+    return true;
+  });
+}
+
+export function collectUniqueTags(
+  exercises: { tags: string[] }[],
+): string[] {
+  const set = new Set<string>();
+  for (const e of exercises) {
+    for (const t of e.tags) {
+      const trimmed = t.trim();
+      if (trimmed) set.add(trimmed);
+    }
+  }
+  return [...set].sort((a, b) => a.localeCompare(b));
 }

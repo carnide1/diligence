@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useGym } from "@/contexts/GymContext";
 import { toErrorMessage } from "@/lib/errors";
 import {
@@ -18,16 +18,18 @@ import { TextInput } from "@/components/ui/TextInput";
 type LiftDraft = {
   exerciseId: string;
   weight: string;
+  sets: string;
   reps: string;
 };
 
 type CardioDraft = {
   minutes: string;
   calories: string;
+  machine: string;
 };
 
 function emptyLift(): LiftDraft {
-  return { exerciseId: "", weight: "", reps: "" };
+  return { exerciseId: "", weight: "", sets: "", reps: "" };
 }
 
 function liftsFromSession(
@@ -44,21 +46,26 @@ function liftsFromSession(
   return source.map((l) => ({
     exerciseId: l.exerciseId,
     weight: String(l.weight),
+    sets: String(l.sets ?? 1),
     reps: String(l.reps),
   }));
 }
 
 function cardioFromBlock(
-  block: { minutes: number; calories: number } | null | undefined,
+  block:
+    | { minutes: number; calories: number; machine?: string }
+    | null
+    | undefined,
   fallbackMinutes: number,
 ): CardioDraft {
   if (block) {
     return {
       minutes: String(block.minutes),
       calories: String(block.calories),
+      machine: block.machine ?? "",
     };
   }
-  return { minutes: String(fallbackMinutes), calories: "" };
+  return { minutes: String(fallbackMinutes), calories: "", machine: "" };
 }
 
 function parseLifts(drafts: LiftDraft[]): GymLiftEntry[] | null {
@@ -69,16 +76,21 @@ function parseLifts(drafts: LiftDraft[]): GymLiftEntry[] | null {
       return null;
     }
     const weight = Number(d.weight);
+    const sets = Number(d.sets);
     const reps = Number(d.reps);
     if (!Number.isFinite(weight) || weight < 0) {
       toast.error("Every lift needs a non-negative weight");
+      return null;
+    }
+    if (!Number.isFinite(sets) || sets <= 0) {
+      toast.error("Every lift needs sets greater than zero");
       return null;
     }
     if (!Number.isFinite(reps) || reps <= 0) {
       toast.error("Every lift needs reps greater than zero");
       return null;
     }
-    lifts.push({ exerciseId: d.exerciseId, weight, reps });
+    lifts.push({ exerciseId: d.exerciseId, weight, sets, reps });
   }
   return lifts;
 }
@@ -86,14 +98,19 @@ function parseLifts(drafts: LiftDraft[]): GymLiftEntry[] | null {
 function parseCardio(
   draft: CardioDraft,
   label: string,
-): { minutes: number; calories: number } | null {
+): { minutes: number; calories: number; machine: string } | null {
   const minutes = Number(draft.minutes);
   const calories = Number(draft.calories);
+  const machine = draft.machine.trim();
   if (!Number.isFinite(minutes) || !Number.isFinite(calories)) {
     toast.error(`${label} needs numeric minutes and calories`);
     return null;
   }
-  return { minutes, calories };
+  if (!machine) {
+    toast.error(`${label} needs a machine name`);
+    return null;
+  }
+  return { minutes, calories, machine };
 }
 
 export function GymTodayPanel() {
@@ -106,8 +123,11 @@ export function GymTodayPanel() {
   } = useGym();
 
   const status = todaySession?.status;
-  const showPlan = !todaySession || status === "rejected";
-  const showComplete = status === "planned" || status === "rejected";
+  const [editingPlan, setEditingPlan] = useState(false);
+  const showPlan =
+    !todaySession || status === "rejected" || (status === "planned" && editingPlan);
+  const showComplete =
+    (status === "planned" && !editingPlan) || status === "rejected";
   const showSuccess = status === "accepted";
 
   const [templateId, setTemplateId] = useState("");
@@ -117,19 +137,23 @@ export function GymTodayPanel() {
   const [planWarmup, setPlanWarmup] = useState<CardioDraft>({
     minutes: String(WARMUP_MINUTES_MIN),
     calories: "",
+    machine: "",
   });
   const [planCardio, setPlanCardio] = useState<CardioDraft>({
     minutes: String(CARDIO_MINUTES_MIN),
     calories: "",
+    machine: "",
   });
   const [completeLifts, setCompleteLifts] = useState<LiftDraft[]>([]);
   const [completeWarmup, setCompleteWarmup] = useState<CardioDraft>({
     minutes: String(WARMUP_MINUTES_MIN),
     calories: "",
+    machine: "",
   });
   const [completeCardio, setCompleteCardio] = useState<CardioDraft>({
     minutes: String(CARDIO_MINUTES_MIN),
     calories: "",
+    machine: "",
   });
   const [savingPlan, setSavingPlan] = useState(false);
   const [savingComplete, setSavingComplete] = useState(false);
@@ -144,7 +168,6 @@ export function GymTodayPanel() {
     [exercises],
   );
 
-  // Seed complete form when session is planned/rejected
   useEffect(() => {
     if (!todaySession) return;
     if (todaySession.status !== "planned" && todaySession.status !== "rejected") {
@@ -173,9 +196,11 @@ export function GymTodayPanel() {
     return () => clearTimeout(timer);
   }, [todaySession]);
 
-  // When rejected, also seed plan form from last plan
   useEffect(() => {
-    if (!todaySession || todaySession.status !== "rejected") return;
+    if (!todaySession) return;
+    if (todaySession.status !== "rejected" && todaySession.status !== "planned")
+      return;
+    if (todaySession.status === "planned" && !editingPlan) return;
     const timer = setTimeout(() => {
       setPlanLifts(liftsFromSession(todaySession, false));
       setPlanWarmup(
@@ -187,7 +212,20 @@ export function GymTodayPanel() {
       setTemplateId(todaySession.templateId ?? "");
     }, 0);
     return () => clearTimeout(timer);
-  }, [todaySession]);
+  }, [todaySession, editingPlan]);
+
+  const startEditPlan = () => {
+    if (!todaySession) return;
+    setPlanLifts(liftsFromSession(todaySession, false));
+    setPlanWarmup(
+      cardioFromBlock(todaySession.plannedWarmup, WARMUP_MINUTES_MIN),
+    );
+    setPlanCardio(
+      cardioFromBlock(todaySession.plannedCardio, CARDIO_MINUTES_MIN),
+    );
+    setTemplateId(todaySession.templateId ?? "");
+    setEditingPlan(true);
+  };
 
   const applyTemplate = (id: string) => {
     setTemplateId(id);
@@ -200,6 +238,7 @@ export function GymTodayPanel() {
         return {
           exerciseId,
           weight: ex?.lastWeight != null ? String(ex.lastWeight) : "",
+          sets: ex?.lastSets != null ? String(ex.lastSets) : "",
           reps: ex?.lastReps != null ? String(ex.lastReps) : "",
         };
       }),
@@ -208,10 +247,11 @@ export function GymTodayPanel() {
       ...w,
       minutes: String(tpl.warmupMinutesTarget),
     }));
-    setPlanCardio({
+    setPlanCardio((c) => ({
+      ...c,
       minutes: String(tpl.cardioMinutesTarget),
       calories: String(tpl.cardioCaloriesTarget),
-    });
+    }));
   };
 
   const updateLift = (
@@ -236,6 +276,8 @@ export function GymTodayPanel() {
         ex?.lastWeight != null
           ? String(ex.lastWeight)
           : list[index]?.weight ?? "",
+      sets:
+        ex?.lastSets != null ? String(ex.lastSets) : list[index]?.sets ?? "",
       reps:
         ex?.lastReps != null ? String(ex.lastReps) : list[index]?.reps ?? "",
     });
@@ -261,7 +303,8 @@ export function GymTodayPanel() {
         warmup,
         cardio,
       });
-      toast.success("Plan saved");
+      toast.success(editingPlan ? "Plan updated" : "Plan saved");
+      setEditingPlan(false);
     } catch (err) {
       toast.error(toErrorMessage(err, "Could not save plan"));
     } finally {
@@ -337,15 +380,34 @@ export function GymTodayPanel() {
         </div>
       ) : null}
 
+      {status === "planned" && !editingPlan ? (
+        <div className="flex items-center justify-between gap-3 rounded-[var(--radius)] border border-border bg-bg-elevated px-4 py-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">Plan saved</p>
+            <p className="text-xs text-muted">
+              Log actuals below, or edit the plan first.
+            </p>
+          </div>
+          <Button size="sm" variant="secondary" onClick={startEditPlan}>
+            <Pencil size={14} />
+            Edit plan
+          </Button>
+        </div>
+      ) : null}
+
       {showPlan ? (
         <section className="flex flex-col gap-4">
           <div>
             <h2 className="font-display text-lg text-foreground">
-              {status === "rejected" ? "Revise plan" : "Plan today"}
+              {editingPlan
+                ? "Edit plan"
+                : status === "rejected"
+                  ? "Revise plan"
+                  : "Plan today"}
             </h2>
             <p className="mt-1 text-sm text-muted">
-              At least {WEEKLY_WORKOUT_TARGET} resistance lifts, warm-up, and
-              cardio.
+              At least {WEEKLY_WORKOUT_TARGET} resistance lifts (weight / sets /
+              reps), warm-up, and cardio.
             </p>
           </div>
 
@@ -399,9 +461,24 @@ export function GymTodayPanel() {
             minMinutes={CARDIO_MINUTES_MIN}
           />
 
-          <Button onClick={() => void onSubmitPlan()} disabled={savingPlan}>
-            {savingPlan ? "Saving…" : "Save plan"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => void onSubmitPlan()} disabled={savingPlan}>
+              {savingPlan
+                ? "Saving…"
+                : editingPlan
+                  ? "Update plan"
+                  : "Save plan"}
+            </Button>
+            {editingPlan ? (
+              <Button
+                variant="ghost"
+                disabled={savingPlan}
+                onClick={() => setEditingPlan(false)}
+              >
+                Cancel edit
+              </Button>
+            ) : null}
+          </div>
         </section>
       ) : null}
 
@@ -492,8 +569,8 @@ function LiftEditor({
             key={`${index}-${row.exerciseId || "empty"}`}
             className="rounded-[var(--radius)] border border-border bg-bg-elevated p-3"
           >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-              <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-sm">
+            <div className="flex flex-col gap-2">
+              <label className="flex min-w-0 flex-col gap-1.5 text-sm">
                 <span className="font-medium text-muted">Exercise</span>
                 <select
                   value={row.exerciseId}
@@ -508,34 +585,46 @@ function LiftEditor({
                   ))}
                 </select>
               </label>
-              <TextInput
-                label="Weight"
-                type="number"
-                min={0}
-                step="any"
-                value={row.weight}
-                onChange={(e) =>
-                  onChangeField(index, { weight: e.target.value })
-                }
-                className="w-full sm:w-24"
-              />
-              <TextInput
-                label="Reps"
-                type="number"
-                min={1}
-                value={row.reps}
-                onChange={(e) => onChangeField(index, { reps: e.target.value })}
-                className="w-full sm:w-20"
-              />
+              <div className="grid grid-cols-3 gap-2">
+                <TextInput
+                  label="Weight"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={row.weight}
+                  onChange={(e) =>
+                    onChangeField(index, { weight: e.target.value })
+                  }
+                />
+                <TextInput
+                  label="Sets"
+                  type="number"
+                  min={1}
+                  value={row.sets}
+                  onChange={(e) =>
+                    onChangeField(index, { sets: e.target.value })
+                  }
+                />
+                <TextInput
+                  label="Reps"
+                  type="number"
+                  min={1}
+                  value={row.reps}
+                  onChange={(e) =>
+                    onChangeField(index, { reps: e.target.value })
+                  }
+                />
+              </div>
               <Button
                 size="sm"
                 variant="ghost"
-                className="shrink-0"
+                className="self-start"
                 onClick={() => onRemove(index)}
                 disabled={lifts.length <= WEEKLY_WORKOUT_TARGET}
                 aria-label="Remove exercise"
               >
                 <Trash2 size={14} />
+                Remove
               </Button>
             </div>
           </li>
@@ -557,7 +646,13 @@ function CardioFields({
   minMinutes: number;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <TextInput
+        label={`${label} machine`}
+        value={value.machine}
+        onChange={(e) => onChange({ ...value, machine: e.target.value })}
+        placeholder="e.g. treadmill"
+      />
       <TextInput
         label={`${label} minutes (min ${minMinutes})`}
         type="number"
