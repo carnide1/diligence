@@ -38,9 +38,13 @@ describe("decideNudge", () => {
     assert.match(email!.text, /no plan/);
   });
 
-  it("skips outside nag hours and when capped", () => {
-    assert.equal(decideNudge(base({ localHour: 22 })), null);
+  it("skips when daily send cap is reached", () => {
     assert.equal(decideNudge(base({ sentToday: 3 })), null);
+  });
+
+  it("still sends during early local morning (single daily cron)", () => {
+    const email = decideNudge(base({ localHour: 5 }));
+    assert.ok(email);
   });
 
   it("sends during daytime even outside old 8/12/17 slots (Hobby daily cron)", () => {

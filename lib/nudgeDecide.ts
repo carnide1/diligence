@@ -37,20 +37,16 @@ export type NudgeEmail = {
   reasons: string[];
 };
 
-function isQuietHour(hour: number): boolean {
-  return hour >= 21 || hour < 7;
-}
-
 /**
  * Hobby Vercel only allows 1 cron/day, so we do not require specific local
- * hours for production sends. Quiet hours still suppress overnight noise.
- * Manual curls during the day still work the same.
+ * hours. Quiet-hour suppression was removed: a fixed UTC cron often lands in
+ * overnight local time for some zones (e.g. US Pacific at 12:00 UTC), which
+ * would permanently silence those users. Frequency is capped by sentToday.
  */
 export function decideNudge(snap: NudgeUserSnapshot): NudgeEmail | null {
   if (!snap.prefs.enabled) return null;
   if (!snap.email.trim()) return null;
   if (snap.sentToday >= MAX_NAGS_PER_DAY) return null;
-  if (isQuietHour(snap.localHour)) return null;
 
   const reasons: string[] = [];
   const lines: string[] = [];
