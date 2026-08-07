@@ -64,7 +64,12 @@ type GymContextValue = {
   planToday: (input: Omit<GymSessionPlanInput, "localDate">) => Promise<void>;
   completeToday: (input: GymSessionCompleteInput) => Promise<GymSession>;
   addAbsence: (input: GymAbsenceInput) => Promise<void>;
+  /** Sessions in the current Mon–Sun gym week. */
   recentSessions: GymSession[];
+  /** All sessions (for exercise progression history). */
+  sessionHistory: GymSession[];
+  /** Names for active + archived exercises (history lookups). */
+  exerciseNameById: Record<string, string>;
 };
 
 const GymContext = createContext<GymContextValue | null>(null);
@@ -83,6 +88,10 @@ export function GymProvider({ children }: { children: ReactNode }) {
   });
   const [todaySession, setTodaySession] = useState<GymSession | null>(null);
   const [recentSessions, setRecentSessions] = useState<GymSession[]>([]);
+  const [sessionHistory, setSessionHistory] = useState<GymSession[]>([]);
+  const [exerciseNameById, setExerciseNameById] = useState<
+    Record<string, string>
+  >({});
   const [weekAcceptedCount, setWeekAcceptedCount] = useState(0);
 
   const refresh = useCallback(async () => {
@@ -92,6 +101,8 @@ export function GymProvider({ children }: { children: ReactNode }) {
       setAbsences([]);
       setTodaySession(null);
       setRecentSessions([]);
+      setSessionHistory([]);
+      setExerciseNameById({});
       setWeekAcceptedCount(0);
       setStats({
         currentStreak: 0,
@@ -108,22 +119,30 @@ export function GymProvider({ children }: { children: ReactNode }) {
     try {
       const today = toLocalDateString();
       const { start, end } = gymWeekBounds(today);
-      const [ex, tpl, abs, nextStats, todaySess, sessions] = await Promise.all([
-        listExercises(user.uid),
+      const [ex, tpl, abs, nextStats, todaySess, allSessions] = await Promise.all([
+        listExercises(user.uid, { includeArchived: true }),
         listTemplates(user.uid),
         listAbsences(user.uid),
         refreshGymStreaks(user.uid, today),
         getSessionForDate(user.uid, today),
-        listSessions(user.uid, { from: start, to: end }),
+        listSessions(user.uid),
       ]);
-      setExercises(ex);
+      const activeExercises = ex.filter((e) => !e.archived);
+      const weekSessions = allSessions.filter(
+        (s) => s.localDate >= start && s.localDate <= end,
+      );
+      setExercises(activeExercises);
+      setExerciseNameById(
+        Object.fromEntries(ex.map((e) => [e.id, e.name])),
+      );
       setTemplates(tpl);
       setAbsences(abs);
       setStats(nextStats);
       setTodaySession(todaySess);
-      setRecentSessions(sessions);
+      setRecentSessions(weekSessions);
+      setSessionHistory(allSessions);
       setWeekAcceptedCount(
-        sessions.filter((s) => s.status === "accepted").length,
+        weekSessions.filter((s) => s.status === "accepted").length,
       );
     } catch (err) {
       console.error(err);
@@ -270,6 +289,8 @@ export function GymProvider({ children }: { children: ReactNode }) {
       completeToday,
       addAbsence,
       recentSessions,
+      sessionHistory,
+      exerciseNameById,
     }),
     [
       loading,
@@ -293,6 +314,8 @@ export function GymProvider({ children }: { children: ReactNode }) {
       completeToday,
       addAbsence,
       recentSessions,
+      sessionHistory,
+      exerciseNameById,
     ],
   );
 
