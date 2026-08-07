@@ -10,7 +10,7 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(
     const inputId = id ?? props.name;
 
     return (
-      <label className="flex flex-col gap-1.5 text-sm">
+      <label className="flex min-w-0 flex-col gap-1.5 text-sm">
         {label ? (
           <span className="font-medium text-muted">{label}</span>
         ) : null}
@@ -19,7 +19,8 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(
           id={inputId}
           className={[
             // text-base (16px) avoids iOS Safari zoom-on-focus
-            "h-10 rounded-[var(--radius-sm)] border bg-bg-elevated px-3 text-base text-foreground placeholder:text-faint",
+            // min-w-0 + w-full keeps grid/flex children from overflowing
+            "h-10 w-full min-w-0 rounded-[var(--radius-sm)] border bg-bg-elevated px-3 text-base text-foreground placeholder:text-faint",
             error ? "border-danger" : "border-border focus:border-accent",
             className,
           ].join(" ")}

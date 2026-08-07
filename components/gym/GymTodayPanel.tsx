@@ -13,18 +13,21 @@ import {
   type GymLiftEntry,
   type GymLoadType,
   type GymSession,
-  type GymSet,
 } from "@/types/gym";
 import { Button } from "@/components/ui/Button";
 import { TextInput } from "@/components/ui/TextInput";
 import { FORM_SELECT_CLASS } from "@/components/ui/formStyles";
-
-type SetDraft = { weight: string; reps: string };
+import {
+  collapseSets,
+  emptySetGroup,
+  expandSetGroups,
+  type SetGroupDraft,
+} from "@/lib/gymSetGroups";
 
 type LiftDraft = {
   exerciseId: string;
   loadType: GymLoadType;
-  sets: SetDraft[];
+  sets: SetGroupDraft[];
 };
 
 type CardioDraft = {
@@ -33,39 +36,32 @@ type CardioDraft = {
   machine: string;
 };
 
-function emptySet(): SetDraft {
-  return { weight: "", reps: "" };
-}
-
 function emptyLift(): LiftDraft {
-  return { exerciseId: "", loadType: "external", sets: [emptySet()] };
+  return { exerciseId: "", loadType: "external", sets: [emptySetGroup()] };
 }
 
-function setsFromExercise(ex: GymExercise | undefined): SetDraft[] {
+function setsFromExercise(ex: GymExercise | undefined): SetGroupDraft[] {
   if (ex?.lastSetPerformance?.length) {
-    return ex.lastSetPerformance.map((s) => ({
-      weight: String(s.weight),
-      reps: String(s.reps),
-    }));
+    return collapseSets(ex.lastSetPerformance);
   }
   if (ex?.lastWeight != null && ex.lastReps != null) {
     const count = ex.lastSets && ex.lastSets > 0 ? ex.lastSets : 1;
-    return Array.from({ length: count }, () => ({
-      weight: String(ex.lastWeight),
-      reps: String(ex.lastReps),
-    }));
+    return [
+      {
+        weight: String(ex.lastWeight),
+        reps: String(ex.lastReps),
+        times: String(count),
+      },
+    ];
   }
-  return [emptySet()];
+  return [emptySetGroup()];
 }
 
 function liftToDraft(l: GymLiftEntry): LiftDraft {
   return {
     exerciseId: l.exerciseId,
     loadType: l.loadType,
-    sets: l.sets.map((s) => ({
-      weight: String(s.weight),
-      reps: String(s.reps),
-    })),
+    sets: collapseSets(l.sets),
   };
 }
 
@@ -107,32 +103,15 @@ function parseLifts(drafts: LiftDraft[]): GymLiftEntry[] | null {
       toast.error("Every row needs an exercise");
       return null;
     }
-    if (!d.sets.length) {
-      toast.error("Every lift needs at least one set");
+    const expanded = expandSetGroups(d.sets, d.loadType);
+    if (!expanded.ok) {
+      toast.error(expanded.reason);
       return null;
-    }
-    const sets: GymSet[] = [];
-    for (const s of d.sets) {
-      const reps = Number(s.reps);
-      if (!Number.isFinite(reps) || reps <= 0) {
-        toast.error("Every set needs reps greater than zero");
-        return null;
-      }
-      if (d.loadType === "bodyweight") {
-        sets.push({ weight: 0, reps });
-      } else {
-        const weight = Number(s.weight);
-        if (!Number.isFinite(weight) || weight < 0) {
-          toast.error("Every set needs a non-negative weight in lb");
-          return null;
-        }
-        sets.push({ weight, reps });
-      }
     }
     lifts.push({
       exerciseId: d.exerciseId,
       loadType: d.loadType,
-      sets,
+      sets: expanded.sets,
     });
   }
   return lifts;
@@ -442,8 +421,8 @@ export function GymTodayPanel() {
                   : "Plan today"}
             </h2>
             <p className="mt-1 text-sm text-muted">
-              At least {WEEKLY_WORKOUT_TARGET} resistance lifts with per-set
-              lb×reps (or bodyweight), warm-up, and cardio.
+              At least {WEEKLY_WORKOUT_TARGET} resistance lifts. Enter matching
+              sets as weight × reps × count on one row.
             </p>
           </div>
 
@@ -589,10 +568,10 @@ function LiftEditor({
   onAdd: () => void;
   onRemove: (index: number) => void;
 }) {
-  const updateSet = (
+  const updateSetGroup = (
     liftIndex: number,
     setIndex: number,
-    patch: Partial<SetDraft>,
+    patch: Partial<SetGroupDraft>,
   ) => {
     const row = lifts[liftIndex];
     if (!row) return;
@@ -617,9 +596,9 @@ function LiftEditor({
         {lifts.map((row, index) => (
           <li
             key={`${index}-${row.exerciseId || "empty"}`}
-            className="rounded-[var(--radius)] border border-border bg-bg-elevated p-3"
+            className="min-w-0 overflow-hidden rounded-[var(--radius)] border border-border bg-bg-elevated p-3"
           >
-            <div className="flex flex-col gap-3">
+            <div className="flex min-w-0 flex-col gap-3">
               <label className="flex min-w-0 flex-col gap-1.5 text-sm">
                 <span className="font-medium text-muted">Exercise</span>
                 <select
@@ -636,7 +615,7 @@ function LiftEditor({
                 </select>
               </label>
 
-              <label className="flex flex-col gap-1.5 text-sm">
+              <label className="flex min-w-0 flex-col gap-1.5 text-sm">
                 <span className="font-medium text-muted">Load</span>
                 <select
                   value={row.loadType}
@@ -652,60 +631,92 @@ function LiftEditor({
                 </select>
               </label>
 
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted">Sets</span>
+              <div className="flex min-w-0 flex-col gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-muted">
+                    Sets{" "}
+                    <span className="font-normal text-faint">
+                      (weight × reps × count)
+                    </span>
+                  </span>
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() =>
                       onChangeField(index, {
-                        sets: [...row.sets, emptySet()],
+                        sets: [...row.sets, emptySetGroup()],
                       })
                     }
                   >
                     <Plus size={14} />
-                    Set
+                    Row
                   </Button>
                 </div>
                 {row.sets.map((set, setIndex) => (
                   <div
                     key={setIndex}
-                    className="grid grid-cols-[1fr_1fr_auto] gap-2"
+                    className={
+                      row.loadType === "external"
+                        ? "grid min-w-0 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.85fr)_auto] items-end gap-2"
+                        : "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_minmax(0,0.85fr)_auto] items-end gap-2"
+                    }
                   >
                     {row.loadType === "external" ? (
                       <TextInput
-                        label={setIndex === 0 ? "Weight (lb)" : undefined}
+                        label={setIndex === 0 ? "Weight" : undefined}
                         type="number"
+                        inputMode="decimal"
                         min={0}
                         step="any"
                         value={set.weight}
                         onChange={(e) =>
-                          updateSet(index, setIndex, {
+                          updateSetGroup(index, setIndex, {
                             weight: e.target.value,
                           })
                         }
-                        aria-label={`Set ${setIndex + 1} weight`}
+                        aria-label={`Row ${setIndex + 1} weight`}
                       />
                     ) : (
-                      <div className="flex h-10 items-center text-sm text-muted">
+                      <div
+                        className={[
+                          "flex h-10 items-center text-sm text-muted",
+                          setIndex === 0 ? "mt-6" : "",
+                        ].join(" ")}
+                      >
                         BW
                       </div>
                     )}
                     <TextInput
                       label={setIndex === 0 ? "Reps" : undefined}
                       type="number"
+                      inputMode="numeric"
                       min={1}
                       value={set.reps}
                       onChange={(e) =>
-                        updateSet(index, setIndex, { reps: e.target.value })
+                        updateSetGroup(index, setIndex, {
+                          reps: e.target.value,
+                        })
                       }
-                      aria-label={`Set ${setIndex + 1} reps`}
+                      aria-label={`Row ${setIndex + 1} reps`}
+                    />
+                    <TextInput
+                      label={setIndex === 0 ? "× Sets" : undefined}
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      step={1}
+                      value={set.times}
+                      onChange={(e) =>
+                        updateSetGroup(index, setIndex, {
+                          times: e.target.value,
+                        })
+                      }
+                      aria-label={`Row ${setIndex + 1} set count`}
                     />
                     <Button
                       size="sm"
                       variant="ghost"
-                      className={setIndex === 0 ? "mt-6" : ""}
+                      className="shrink-0 px-2"
                       onClick={() =>
                         onChangeField(index, {
                           sets:
@@ -715,7 +726,7 @@ function LiftEditor({
                         })
                       }
                       disabled={row.sets.length <= 1}
-                      aria-label={`Remove set ${setIndex + 1}`}
+                      aria-label={`Remove set row ${setIndex + 1}`}
                     >
                       <Trash2 size={14} />
                     </Button>

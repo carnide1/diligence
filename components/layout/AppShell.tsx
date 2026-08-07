@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -41,7 +42,35 @@ function NavLink({
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+/** Hide bottom nav while the soft keyboard is open (avoids fixed-nav jump on iOS). */
+function useSoftKeyboardOpen(): boolean {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const sync = () => {
+      // Keyboard typically shrinks the visual viewport by >120px on phones.
+      const obscured = window.innerHeight - vv.height;
+      setOpen(obscured > 120);
+    };
+
+    sync();
+    vv.addEventListener("resize", sync);
+    vv.addEventListener("scroll", sync);
+    return () => {
+      vv.removeEventListener("resize", sync);
+      vv.removeEventListener("scroll", sync);
+    };
+  }, []);
+
+  return open;
+}
+
+export function AppShell({ children }: { children: ReactNode }) {
+  const keyboardOpen = useSoftKeyboardOpen();
+
   return (
     <div className="min-h-dvh bg-bg md:grid md:grid-cols-[var(--sidebar-width)_1fr]">
       <aside className="hidden border-r border-border bg-bg-elevated md:flex md:flex-col md:gap-6 md:p-5">
@@ -58,18 +87,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
 
-      <div className="flex min-h-dvh flex-col bg-bg">
-        <header className="flex items-center border-b border-border bg-bg px-4 py-3 md:hidden">
+      {/*
+        Mobile: flex column with scrollable main + in-flow bottom nav (not
+        position:fixed). Fixed bottom bars jump when iOS resizes around the
+        keyboard; hiding the nav while the keyboard is open avoids overlap.
+      */}
+      <div className="flex h-dvh flex-col overflow-hidden bg-bg md:min-h-dvh md:h-auto md:overflow-visible">
+        <header className="flex shrink-0 items-center border-b border-border bg-bg px-4 py-3 md:hidden">
           <p className="font-display text-xl text-foreground">Diligence</p>
         </header>
 
-        <main className="relative flex-1 bg-bg px-4 py-5 pb-[calc(var(--nav-height)+1rem)] md:px-8 md:pb-8">
+        <main className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain bg-bg px-4 py-5 md:overflow-visible md:px-8 md:pb-8">
           {children}
         </main>
 
         <nav
-          className="fixed inset-x-0 bottom-0 z-40 flex h-[var(--nav-height)] border-t border-border bg-bg-elevated md:hidden"
+          className={[
+            "z-40 shrink-0 border-t border-border bg-bg-elevated md:hidden",
+            // Height = bar + home-indicator inset (border-box would squash content if pb were inside a fixed h-*).
+            "flex min-h-[var(--nav-height)] pb-[env(safe-area-inset-bottom,0px)]",
+            keyboardOpen ? "hidden" : "",
+          ].join(" ")}
           aria-label="Primary"
+          aria-hidden={keyboardOpen}
         >
           {NAV_ITEMS.map((item) => (
             <NavLink key={item.href} {...item} orientation="bottom" />
